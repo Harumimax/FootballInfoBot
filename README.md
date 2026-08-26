@@ -23,6 +23,8 @@ Local work should focus on:
 
 Infrastructure checks run on the VPS through Docker Compose.
 
+The parser uses BeautifulSoup with the standard `html.parser` backend by default. `lxml` can be installed as an optional speedup later, but it is not required for local tests.
+
 ## Runtime Processes
 
 - `football-info-bot`: Telegram bot process.
