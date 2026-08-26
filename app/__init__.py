@@ -1,0 +1,2 @@
+"""FootballInfoBot application package."""
+
