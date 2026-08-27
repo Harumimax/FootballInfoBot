@@ -3,12 +3,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.parser.dto import LeaguePageData, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.services.subscriptions.dto import CurrentRoundView, LeagueView, StandingTableView, TelegramUserProfile
+from app.services.notifications.push import LeagueRoundState, PushNotification, SubscriberView
 from app.services.updates.sync import ParserRunDraft, SaveLeaguePageResult
 from app.storage.models import (
     DataChangeEvent,
@@ -190,6 +191,97 @@ class FootballDataSqlAlchemyRepository:
 
         rows = await self._load_standing_rows(snapshot)
         return StandingTableView(league=LeagueView(code=league.code, name=league.name), rows=rows)
+
+    async def get_active_league_round_states(self, match_date) -> tuple[LeagueRoundState, ...]:  # noqa: ANN001
+        leagues = await self._session.scalars(
+            select(League).where(League.source == "kulichki", League.is_active.is_(True)).order_by(League.name)
+        )
+        states = []
+
+        for league in leagues:
+            season = await self._get_current_season(league)
+            if season is None:
+                states.append(
+                    LeagueRoundState(
+                        league=LeagueView(code=league.code, name=league.name),
+                        round=None,
+                        rounds=(),
+                        has_match_today=False,
+                        all_today_matches_finished=False,
+                        has_changes_today=False,
+                    )
+                )
+                continue
+
+            rounds = await self._load_notification_rounds(league, season, match_date)
+            today_matches = [
+                match
+                for round_ in rounds
+                for match in round_.matches
+                if match.scheduled_at is not None and match.scheduled_at.date() == match_date
+            ]
+            current_round = rounds[0] if rounds else None
+            has_match_today = bool(today_matches)
+            all_today_matches_finished = bool(today_matches) and all(
+                match.status in {"finished", "postponed", "cancelled"} for match in today_matches
+            )
+
+            states.append(
+                LeagueRoundState(
+                    league=LeagueView(code=league.code, name=league.name),
+                    round=current_round,
+                    rounds=rounds,
+                    has_match_today=has_match_today,
+                    all_today_matches_finished=all_today_matches_finished,
+                    has_changes_today=await self._has_match_changes_for_date(league, match_date),
+                )
+            )
+
+        return tuple(states)
+
+    async def get_active_subscribers_for_league(self, league_code: str) -> tuple[SubscriberView, ...]:
+        statement = (
+            select(User.id, User.telegram_user_id)
+            .join(Subscription, Subscription.user_id == User.id)
+            .join(League, League.id == Subscription.league_id)
+            .where(
+                League.source == "kulichki",
+                League.code == league_code,
+                League.is_active.is_(True),
+                Subscription.is_active.is_(True),
+                Subscription.notify_digest.is_(True),
+            )
+            .order_by(User.id)
+        )
+        result = await self._session.execute(statement)
+        return tuple(SubscriberView(user_id=row.id, telegram_user_id=row.telegram_user_id) for row in result)
+
+    async def was_notification_sent(self, dedupe_key: str) -> bool:
+        existing = await self._session.scalar(
+            select(NotificationLog.id).where(NotificationLog.dedupe_key == dedupe_key).limit(1)
+        )
+        return existing is not None
+
+    async def record_notification_sent(self, notification: PushNotification) -> None:
+        user = await self._session.scalar(
+            select(User).where(User.telegram_user_id == notification.telegram_user_id).limit(1)
+        )
+        if user is None:
+            return
+
+        self._session.add(
+            NotificationLog(
+                user_id=user.id,
+                subscription_id=None,
+                change_event_id=None,
+                message_type="digest",
+                dedupe_key=notification.dedupe_key,
+                telegram_message_id=None,
+                status="sent",
+                error_message=None,
+            )
+        )
+        await self._session.flush()
 
     async def _upsert_league(self, data: LeaguePageData) -> League:
         statement = select(League).where(League.source == "kulichki", League.code == data.league.code)
@@ -392,6 +484,61 @@ class FootballDataSqlAlchemyRepository:
             select(League).where(League.source == "kulichki", League.code == league_code, League.is_active.is_(True))
         )
 
+    async def _get_current_season(self, league: League) -> Season | None:
+        return await self._session.scalar(
+            select(Season)
+            .where(Season.league_id == league.id, Season.is_current.is_(True))
+            .order_by(desc(Season.id))
+            .limit(1)
+        )
+
+    async def _load_notification_rounds(
+        self,
+        league: League,
+        season: Season,
+        match_date,
+    ) -> tuple[ParsedRound, ...]:  # noqa: ANN001
+        statement = (
+            select(Round)
+            .outerjoin(Match, Match.round_id == Round.id)
+            .where(
+                Round.league_id == league.id,
+                Round.season_id == season.id,
+                or_(
+                    Round.status == "active",
+                    func.date(Match.scheduled_at) == match_date,
+                ),
+            )
+            .order_by(desc(Round.status == "active"), desc(Round.round_number))
+        )
+        result = await self._session.scalars(statement)
+        rounds = []
+        seen_round_ids = set()
+        for round_ in result:
+            if round_.id in seen_round_ids:
+                continue
+            seen_round_ids.add(round_.id)
+            parsed_round = ParsedRound(
+                number=round_.round_number,
+                source_url=round_.source_url,
+                matches=await self._load_round_matches(round_),
+            )
+            if parsed_round.matches:
+                rounds.append(parsed_round)
+        return tuple(rounds)
+
+    async def _has_match_changes_for_date(self, league: League, match_date) -> bool:  # noqa: ANN001
+        event_id = await self._session.scalar(
+            select(DataChangeEvent.id)
+            .join(Match, Match.id == DataChangeEvent.match_id)
+            .where(
+                DataChangeEvent.league_id == league.id,
+                func.date(Match.scheduled_at) == match_date,
+            )
+            .limit(1)
+        )
+        return event_id is not None
+
     async def _load_round_matches(self, round_: Round) -> tuple[ParsedMatch, ...]:
         HomeTeam = aliased(Team)
         AwayTeam = aliased(Team)
@@ -406,15 +553,15 @@ class FootballDataSqlAlchemyRepository:
 
         return tuple(
             ParsedMatch(
-                home_team=row.home_name,
-                away_team=row.away_name,
-                scheduled_at=row.Match.scheduled_at,
-                home_score=row.Match.home_score,
-                away_score=row.Match.away_score,
-                status=row.Match.status,
-                source_url=row.Match.source_url,
+                home_team=home_name,
+                away_team=away_name,
+                scheduled_at=match.scheduled_at,
+                home_score=match.home_score,
+                away_score=match.away_score,
+                status=match.status,
+                source_url=match.source_url,
             )
-            for row in result
+            for match, home_name, away_name in result
         )
 
     async def _load_standing_rows(self, snapshot: StandingSnapshot) -> tuple[ParsedStandingRow, ...]:
@@ -428,12 +575,12 @@ class FootballDataSqlAlchemyRepository:
 
         return tuple(
             ParsedStandingRow(
-                position=row.StandingRow.position,
-                team_name=row.team_name,
-                played=row.StandingRow.played,
-                points=row.StandingRow.points,
+                position=standing_row.position,
+                team_name=team_name,
+                played=standing_row.played,
+                points=standing_row.points,
             )
-            for row in result
+            for standing_row, team_name in result
         )
 
 

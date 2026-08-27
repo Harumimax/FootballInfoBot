@@ -84,6 +84,21 @@ def render_round_state(league_name: str, round_: ParsedRound | None) -> str:
     return "\n".join(lines)
 
 
+def render_rounds_state(league_name: str, rounds: tuple[ParsedRound, ...]) -> str:
+    visible_rounds = tuple(round_ for round_ in rounds if round_.matches)
+    if not visible_rounds:
+        return NO_DATA_MESSAGE
+
+    if len(visible_rounds) == 1:
+        return render_round_state(league_name, visible_rounds[0])
+
+    lines = [league_name]
+    for round_ in visible_rounds:
+        lines.extend(("", f"{round_.number}-й тур"))
+        lines.extend(_format_match(match) for match in round_.matches)
+    return "\n".join(lines)
+
+
 def render_standings(table: StandingTableView | None) -> str:
     if table is None or not table.rows:
         return NO_DATA_MESSAGE

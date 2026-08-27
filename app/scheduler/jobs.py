@@ -28,3 +28,10 @@ def mvp_push_job_specs() -> tuple[CronJobSpec, ...]:
         CronJobSpec(name="after_matchday_check", hour=2, minute=0),
         CronJobSpec(name="after_matchday_check", hour=3, minute=0),
     )
+
+
+def daily_full_sync_job_specs() -> tuple[CronJobSpec, ...]:
+    return (
+        CronJobSpec(name="daily_full_sync", hour=6, minute=0),
+        CronJobSpec(name="daily_full_sync", hour=18, minute=0),
+    )

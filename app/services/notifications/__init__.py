@@ -1,5 +1,6 @@
 """Notification delivery services."""
 
+from app.services.notifications.sender import TelegramPushSender
 from app.services.notifications.push import (
     AFTER_MATCHDAY_FIRST_CHECK_TIME,
     AFTER_MATCHDAY_LAST_CHECK_TIME,
@@ -24,6 +25,7 @@ __all__ = [
     "PushNotificationService",
     "PushRunResult",
     "SubscriberView",
+    "TelegramPushSender",
     "after_matchday_target_date",
     "should_run_after_matchday_check",
 ]

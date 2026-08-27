@@ -239,6 +239,7 @@ class NotificationLog(Base):
     __tablename__ = "notification_log"
     __table_args__ = (
         UniqueConstraint("user_id", "change_event_id", "message_type", name="uq_notification_log_user_event_type"),
+        UniqueConstraint("dedupe_key", name="uq_notification_log_dedupe_key"),
         CheckConstraint("message_type in ('result', 'reminder', 'digest', 'system')", name="ck_notification_log_message_type"),
         CheckConstraint("status in ('sent', 'failed', 'skipped')", name="ck_notification_log_status"),
     )
@@ -248,6 +249,7 @@ class NotificationLog(Base):
     subscription_id: Mapped[int | None] = mapped_column(ForeignKey("subscriptions.id", ondelete="SET NULL"), index=True)
     change_event_id: Mapped[int | None] = mapped_column(ForeignKey("data_change_events.id", ondelete="SET NULL"), index=True)
     message_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    dedupe_key: Mapped[str | None] = mapped_column(String(255))
     telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text)

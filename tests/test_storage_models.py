@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import UniqueConstraint
 
-from app.storage.models import Base, League, Match, Subscription
+from app.storage.models import Base, League, Match, NotificationLog, Subscription
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +50,9 @@ class StorageModelsTest(unittest.TestCase):
     def test_subscription_has_user_league_identity(self) -> None:
         self.assertTrue(_has_unique_constraint(Subscription, "user_id", "league_id"))
 
+    def test_notification_log_has_dedupe_key_identity(self) -> None:
+        self.assertTrue(_has_unique_constraint(NotificationLog, "dedupe_key"))
+
     def test_initial_migration_seeds_mvp_leagues(self) -> None:
         migration = PROJECT_ROOT / "migrations" / "versions" / "202608270001_initial_schema.py"
         migration_text = migration.read_text(encoding="utf-8")
@@ -74,6 +77,13 @@ class StorageModelsTest(unittest.TestCase):
         self.assertIn("CREATE TABLE leagues", result.stdout)
         self.assertIn("CREATE TABLE matches", result.stdout)
         self.assertIn("INSERT INTO leagues", result.stdout)
+
+    def test_notification_dedupe_migration_adds_key(self) -> None:
+        migration = PROJECT_ROOT / "migrations" / "versions" / "202608270002_add_notification_dedupe_key.py"
+        migration_text = migration.read_text(encoding="utf-8")
+
+        self.assertIn("dedupe_key", migration_text)
+        self.assertIn("uq_notification_log_dedupe_key", migration_text)
 
 
 def _has_unique_constraint(model: type[object], *column_names: str) -> bool:

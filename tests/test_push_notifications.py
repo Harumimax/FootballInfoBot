@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime
 
 from app.bot.messages import LeagueView
+from app.bot.messages.rendering import render_rounds_state
 from app.parser.dto import ParsedMatch, ParsedRound
 from app.scheduler.jobs import mvp_push_job_specs
 from app.services.notifications import (
@@ -78,6 +79,33 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sender.sent_notifications[0].dedupe_key, "morning:2026-08-27:spain:1001")
         self.assertIn("21.08 20:00 Реал - Барселона", sender.sent_notifications[0].text)
         self.assertIn("22.08 21:00 Атлетико 2:1 Вильярреал", sender.sent_notifications[0].text)
+
+    async def test_morning_push_can_include_catch_up_rounds_in_one_league_message(self) -> None:
+        repository = FakePushRepository(
+            states=(
+                LeagueRoundState(
+                    league=LeagueView(code="spain", name="Испания"),
+                    round=_sample_round(),
+                    rounds=(_sample_round(), _catch_up_round()),
+                    has_match_today=True,
+                    all_today_matches_finished=False,
+                    has_changes_today=False,
+                ),
+            ),
+            subscribers_by_league={"spain": (SubscriberView(user_id=1, telegram_user_id=1001),)},
+        )
+        sender = FakePushSender()
+        service = PushNotificationService(repository=repository, sender=sender)
+
+        result = await service.send_morning_pushes(datetime(2026, 8, 27, 9, 0))
+
+        self.assertEqual(result.sent_count, 1)
+        self.assertEqual(
+            sender.sent_notifications[0].text,
+            render_rounds_state("Испания", (_sample_round(), _catch_up_round())),
+        )
+        self.assertIn("3-й тур", sender.sent_notifications[0].text)
+        self.assertIn("1-й тур", sender.sent_notifications[0].text)
 
     async def test_morning_push_skips_league_without_matches_today(self) -> None:
         repository = FakePushRepository(
@@ -262,6 +290,23 @@ def _sample_round() -> ParsedRound:
                 home_score=2,
                 away_score=1,
                 status="finished",
+            ),
+        ),
+    )
+
+
+def _catch_up_round() -> ParsedRound:
+    return ParsedRound(
+        number=1,
+        source_url="https://football.kulichki.net/spain/2027/1/",
+        matches=(
+            ParsedMatch(
+                home_team="Барселона",
+                away_team="Атлетик",
+                scheduled_at=datetime(2026, 8, 27, 22, 0),
+                home_score=None,
+                away_score=None,
+                status="scheduled",
             ),
         ),
     )

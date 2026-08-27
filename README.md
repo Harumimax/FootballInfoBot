@@ -30,6 +30,12 @@ The parser uses BeautifulSoup with the standard `html.parser` backend by default
 - `football-info-bot`: Telegram bot process.
 - `football-info-worker`: scheduled parser, update, notification, and cleanup jobs.
 
+The worker runs:
+
+- league sync at `06:00` and `18:00 Europe/Moscow`;
+- morning push at `09:00 Europe/Moscow`;
+- after-matchday checks at `23:00`, `00:00`, `01:00`, `02:00`, and `03:00 Europe/Moscow`.
+
 ## Telegram MVP
 
 The current bot supports `/start`, `/help`, the approved main menu, MVP league buttons, subscriptions, latest standings, and current round requests. Live user data is read and written through PostgreSQL when `DATABASE_URL` is configured.
@@ -77,8 +83,10 @@ MVP rules:
 - morning push is sent only when the current round has at least one match today;
 - every push contains the full current round state, not only today's matches;
 - after-matchday checks run at `23:00`, then hourly at `00:00`, `01:00`, `02:00`, and `03:00`;
+- push jobs sync league data before sending messages;
+- a league push can include multiple visible rounds when the league page has catch-up matches;
 - if matches are still unresolved at `03:00`, the service sends the round state as-is only when there were matches today and changes worth reporting;
-- duplicate pushes are prevented by a notification dedupe key.
+- duplicate pushes are prevented by `notification_log.dedupe_key`.
 
 ## MVP Source
 
