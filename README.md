@@ -40,6 +40,12 @@ Generate offline SQL without a local database:
 .\.venv\Scripts\python -m alembic upgrade head --sql
 ```
 
+## Data Sync
+
+League sync is owned by `LeagueSyncService`. It fetches a configured league page, parses it, delegates persistence to the repository layer, and records parser run status.
+
+The first implementation is testable with fake clients and repositories, so it does not require local PostgreSQL.
+
 ## MVP Source
 
 The initial football data source is `football.kulichki.net`.
