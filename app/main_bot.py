@@ -7,6 +7,7 @@ from aiogram import Bot
 
 from app.bot.dispatcher import create_dispatcher
 from app.config import load_settings
+from app.services.admin.service import FootballAdminService
 from app.services.subscriptions.user_service import DatabaseFootballUserService
 from app.storage.session import Database
 
@@ -21,8 +22,10 @@ async def run_bot() -> None:
         return
 
     football_user_service = None
+    football_admin_service = None
     if settings.database_url:
         football_user_service = DatabaseFootballUserService(Database(settings.database_url))
+        football_admin_service = FootballAdminService(settings=settings, database=Database(settings.database_url))
     else:
         logger.warning("DATABASE_URL is empty; live user data is disabled")
 
@@ -30,6 +33,7 @@ async def run_bot() -> None:
     dispatcher = create_dispatcher(
         admin_user_ids=settings.admin_user_ids,
         football_user_service=football_user_service,
+        football_admin_service=football_admin_service,
     )
     try:
         logger.info("Starting FootballInfoBot polling")
@@ -38,6 +42,8 @@ async def run_bot() -> None:
         await bot.session.close()
         if football_user_service is not None:
             await football_user_service.dispose()
+        if football_admin_service is not None:
+            await football_admin_service.dispose()
 
 
 def main() -> None:

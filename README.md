@@ -53,7 +53,7 @@ The current admin skeleton supports:
 - `Последняя ошибка`;
 - `Включить/отключить лигу`.
 
-Until real parser status and update commands are wired to PostgreSQL, admin actions return safe placeholder messages.
+Admin actions are available only to ids from `ADMIN_USER_IDS`. They use PostgreSQL parser runs and league state: force sync runs the real Kulichki league sync, status shows the latest parser activity, last error reads the latest failed parser run, and league toggle updates `leagues.is_active`.
 
 ## Database
 

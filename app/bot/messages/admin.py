@@ -1,27 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 
 from app.bot.messages.rendering import LeagueView, MVP_LEAGUES
+from app.services.admin.dto import AdminSyncResult, LeagueParserStatusView, LeagueToggleResult, ParserStatusView
 
 
 NO_PARSER_ERROR_MESSAGE = "Ошибок парсера пока нет."
-
-
-@dataclass(frozen=True)
-class LeagueParserStatusView:
-    league_name: str
-    last_success_at: datetime | None
-    is_active: bool
-
-
-@dataclass(frozen=True)
-class ParserStatusView:
-    leagues: tuple[LeagueParserStatusView, ...]
-    last_run_at: datetime | None = None
-    last_run_status: str | None = None
-    last_error: str | None = None
 
 
 def render_admin_menu_message() -> str:
@@ -36,12 +21,21 @@ def render_admin_toggle_select_message() -> str:
     return "Выберите лигу, которую нужно включить или отключить."
 
 
-def render_admin_sync_placeholder(league_name: str) -> str:
-    return f"Принудительное обновление лиги {league_name} будет подключено на следующем этапе."
+def render_admin_sync_result(result: AdminSyncResult) -> str:
+    if result.status == "success":
+        return (
+            f"{result.league_name}: обновление завершено.\n\n"
+            f"Матчей: {result.parsed_matches}\n"
+            f"Строк таблицы: {result.parsed_standings_rows}"
+        )
+    if result.status == "skipped":
+        return f"{result.league_name}: обновление пропущено."
+    return f"{result.league_name}: ошибка обновления.\n\n{result.error_message or 'Данных пока нет'}"
 
 
-def render_admin_toggle_placeholder(league_name: str) -> str:
-    return f"Включение и отключение лиги {league_name} будет подключено на следующем этапе."
+def render_admin_toggle_result(result: LeagueToggleResult) -> str:
+    state = "включена" if result.is_active else "отключена"
+    return f"{result.league_name}: лига {state}."
 
 
 def render_parser_status(status: ParserStatusView | None = None) -> str:

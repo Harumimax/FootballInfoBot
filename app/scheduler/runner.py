@@ -31,8 +31,14 @@ class WorkerRuntime:
         await self._database.dispose()
 
     async def sync_all_leagues(self) -> None:
+        async with self._database.session() as session:
+            active_league_codes = await FootballDataSqlAlchemyRepository(session).list_active_league_codes()
+
         async with create_league_sync_service(self._settings) as service:
             for league in build_mvp_league_sources(self._settings):
+                if league.code not in active_league_codes:
+                    logger.info("Skipped disabled league %s", league.code)
+                    continue
                 result = await service.sync_league(league.code)
                 logger.info(
                     "Synced league %s: status=%s matches=%s standings=%s",

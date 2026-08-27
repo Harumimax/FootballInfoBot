@@ -16,15 +16,15 @@ from app.bot.keyboards import (
     build_admin_toggle_league_keyboard,
 )
 from app.bot.messages import (
-    league_name_by_code,
     render_admin_menu_message,
-    render_admin_sync_placeholder,
+    render_admin_sync_result,
     render_admin_sync_select_message,
-    render_admin_toggle_placeholder,
+    render_admin_toggle_result,
     render_admin_toggle_select_message,
     render_last_parser_error,
     render_parser_status,
 )
+from app.services.admin.service import FootballAdminService
 
 
 async def handle_admin_menu(message: Message, admin_user_ids: frozenset[int] | None = None) -> None:
@@ -44,22 +44,32 @@ async def handle_admin_sync_menu(callback: CallbackQuery, admin_user_ids: frozen
         await callback.message.answer(render_admin_sync_select_message(), reply_markup=build_admin_sync_league_keyboard())
 
 
-async def handle_admin_status(callback: CallbackQuery, admin_user_ids: frozenset[int] | None = None) -> None:
+async def handle_admin_status(
+    callback: CallbackQuery,
+    admin_user_ids: frozenset[int] | None = None,
+    football_admin_service: FootballAdminService | None = None,
+) -> None:
     if not await _ensure_admin_callback(callback, admin_user_ids):
         return
 
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer(render_parser_status())
+        status = await football_admin_service.get_parser_status() if football_admin_service is not None else None
+        await callback.message.answer(render_parser_status(status))
 
 
-async def handle_admin_last_error(callback: CallbackQuery, admin_user_ids: frozenset[int] | None = None) -> None:
+async def handle_admin_last_error(
+    callback: CallbackQuery,
+    admin_user_ids: frozenset[int] | None = None,
+    football_admin_service: FootballAdminService | None = None,
+) -> None:
     if not await _ensure_admin_callback(callback, admin_user_ids):
         return
 
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer(render_last_parser_error())
+        error = await football_admin_service.get_last_parser_error() if football_admin_service is not None else None
+        await callback.message.answer(render_last_parser_error(error))
 
 
 async def handle_admin_toggle_menu(callback: CallbackQuery, admin_user_ids: frozenset[int] | None = None) -> None:
@@ -71,24 +81,45 @@ async def handle_admin_toggle_menu(callback: CallbackQuery, admin_user_ids: froz
         await callback.message.answer(render_admin_toggle_select_message(), reply_markup=build_admin_toggle_league_keyboard())
 
 
-async def handle_admin_sync_league(callback: CallbackQuery, admin_user_ids: frozenset[int] | None = None) -> None:
+async def handle_admin_sync_league(
+    callback: CallbackQuery,
+    admin_user_ids: frozenset[int] | None = None,
+    football_admin_service: FootballAdminService | None = None,
+) -> None:
     if not await _ensure_admin_callback(callback, admin_user_ids):
         return
 
-    league_name = league_name_by_code(_strip_callback_prefix(callback.data, CALLBACK_ADMIN_SYNC_PREFIX))
+    league_code = _strip_callback_prefix(callback.data, CALLBACK_ADMIN_SYNC_PREFIX)
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer(render_admin_sync_placeholder(league_name))
+        if football_admin_service is None or not league_code:
+            await callback.message.answer("Данных пока нет.")
+            return
+        await callback.message.answer("Запускаю обновление лиги.")
+        result = await football_admin_service.sync_league(league_code)
+        await callback.message.answer(render_admin_sync_result(result))
 
 
-async def handle_admin_toggle_league(callback: CallbackQuery, admin_user_ids: frozenset[int] | None = None) -> None:
+async def handle_admin_toggle_league(
+    callback: CallbackQuery,
+    admin_user_ids: frozenset[int] | None = None,
+    football_admin_service: FootballAdminService | None = None,
+) -> None:
     if not await _ensure_admin_callback(callback, admin_user_ids):
         return
 
-    league_name = league_name_by_code(_strip_callback_prefix(callback.data, CALLBACK_ADMIN_TOGGLE_PREFIX))
+    league_code = _strip_callback_prefix(callback.data, CALLBACK_ADMIN_TOGGLE_PREFIX)
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer(render_admin_toggle_placeholder(league_name))
+        if football_admin_service is None or not league_code:
+            await callback.message.answer("Данных пока нет.")
+            return
+        try:
+            result = await football_admin_service.toggle_league_active(league_code)
+        except ValueError:
+            await callback.message.answer("Данных пока нет.")
+            return
+        await callback.message.answer(render_admin_toggle_result(result))
 
 
 def _is_admin_message(message: Message, admin_user_ids: frozenset[int] | None) -> bool:

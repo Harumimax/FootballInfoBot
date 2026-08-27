@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.parser.dto import LeaguePageData, ParsedMatch, ParsedRound, ParsedStandingRow
+from app.services.admin.dto import LeagueParserStatusView, LeagueToggleResult, ParserStatusView
 from app.services.subscriptions.dto import CurrentRoundView, LeagueView, StandingTableView, TelegramUserProfile
 from app.services.notifications.push import LeagueRoundState, PushNotification, SubscriberView
 from app.services.updates.sync import ParserRunDraft, SaveLeaguePageResult
@@ -89,6 +91,58 @@ class FootballDataSqlAlchemyRepository:
             )
         )
         await self._session.flush()
+
+    async def get_parser_status(self) -> ParserStatusView:
+        leagues = await self._session.scalars(
+            select(League).where(League.source == "kulichki").order_by(League.name)
+        )
+        league_statuses = []
+        for league in leagues:
+            league_statuses.append(
+                LeagueParserStatusView(
+                    league_name=league.name,
+                    last_success_at=await self._get_last_success_at(league),
+                    is_active=league.is_active,
+                )
+            )
+
+        last_run = await self._session.scalar(
+            select(ParserRun).where(ParserRun.source == "kulichki").order_by(desc(ParserRun.started_at), desc(ParserRun.id)).limit(1)
+        )
+        last_error = await self.get_last_parser_error()
+        return ParserStatusView(
+            leagues=tuple(league_statuses),
+            last_run_at=last_run.finished_at if last_run is not None else None,
+            last_run_status=last_run.status if last_run is not None else None,
+            last_error=last_error,
+        )
+
+    async def get_last_parser_error(self) -> str | None:
+        return await self._session.scalar(
+            select(ParserRun.error_message)
+            .where(
+                ParserRun.source == "kulichki",
+                ParserRun.status == "failed",
+                ParserRun.error_message.is_not(None),
+            )
+            .order_by(desc(ParserRun.finished_at), desc(ParserRun.id))
+            .limit(1)
+        )
+
+    async def toggle_league_active(self, league_code: str) -> LeagueToggleResult:
+        league = await self._session.scalar(select(League).where(League.source == "kulichki", League.code == league_code))
+        if league is None:
+            raise ValueError(f"Unknown league code: {league_code}")
+
+        league.is_active = not league.is_active
+        await self._session.flush()
+        return LeagueToggleResult(league_name=league.name, is_active=league.is_active)
+
+    async def list_active_league_codes(self) -> frozenset[str]:
+        result = await self._session.scalars(
+            select(League.code).where(League.source == "kulichki", League.is_active.is_(True))
+        )
+        return frozenset(result)
 
     async def upsert_telegram_user(self, profile: TelegramUserProfile) -> None:
         statement = select(User).where(User.telegram_user_id == profile.telegram_user_id)
@@ -478,6 +532,19 @@ class FootballDataSqlAlchemyRepository:
 
     async def _get_user_by_telegram_id(self, telegram_user_id: int) -> User | None:
         return await self._session.scalar(select(User).where(User.telegram_user_id == telegram_user_id))
+
+    async def _get_last_success_at(self, league: League) -> datetime | None:
+        return await self._session.scalar(
+            select(ParserRun.finished_at)
+            .where(
+                ParserRun.source == "kulichki",
+                ParserRun.target_type == "league_page",
+                ParserRun.target_url == league.source_url,
+                ParserRun.status == "success",
+            )
+            .order_by(desc(ParserRun.finished_at), desc(ParserRun.id))
+            .limit(1)
+        )
 
     async def _get_active_league_by_code(self, league_code: str) -> League | None:
         return await self._session.scalar(
