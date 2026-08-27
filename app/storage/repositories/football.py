@@ -3,10 +3,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.parser.dto import LeaguePageData, ParsedMatch, ParsedRound, ParsedStandingRow
+from app.services.subscriptions.dto import CurrentRoundView, LeagueView, StandingTableView, TelegramUserProfile
 from app.services.updates.sync import ParserRunDraft, SaveLeaguePageResult
 from app.storage.models import (
     DataChangeEvent,
@@ -17,7 +19,9 @@ from app.storage.models import (
     Season,
     StandingRow,
     StandingSnapshot,
+    Subscription,
     Team,
+    User,
 )
 
 
@@ -84,6 +88,108 @@ class FootballDataSqlAlchemyRepository:
             )
         )
         await self._session.flush()
+
+    async def upsert_telegram_user(self, profile: TelegramUserProfile) -> None:
+        statement = select(User).where(User.telegram_user_id == profile.telegram_user_id)
+        user = await self._session.scalar(statement)
+
+        if user is None:
+            self._session.add(
+                User(
+                    telegram_user_id=profile.telegram_user_id,
+                    username=profile.username,
+                    display_name=profile.display_name,
+                    language_code=profile.language_code,
+                )
+            )
+        else:
+            user.username = profile.username
+            user.display_name = profile.display_name
+            user.language_code = profile.language_code
+
+        await self._session.flush()
+
+    async def list_user_subscriptions(self, telegram_user_id: int) -> tuple[LeagueView, ...]:
+        statement = (
+            select(League.code, League.name)
+            .join(Subscription, Subscription.league_id == League.id)
+            .join(User, User.id == Subscription.user_id)
+            .where(User.telegram_user_id == telegram_user_id, Subscription.is_active.is_(True))
+            .order_by(League.name)
+        )
+        result = await self._session.execute(statement)
+        return tuple(LeagueView(code=row.code, name=row.name) for row in result)
+
+    async def list_user_subscription_codes(self, telegram_user_id: int) -> frozenset[str]:
+        subscriptions = await self.list_user_subscriptions(telegram_user_id)
+        return frozenset(league.code for league in subscriptions)
+
+    async def toggle_league_subscription(self, *, telegram_user_id: int, league_code: str) -> tuple[LeagueView, bool]:
+        user = await self._get_user_by_telegram_id(telegram_user_id)
+        league = await self._get_active_league_by_code(league_code)
+        if user is None or league is None:
+            raise ValueError(f"Unknown user or league: {telegram_user_id}, {league_code}")
+
+        statement = select(Subscription).where(Subscription.user_id == user.id, Subscription.league_id == league.id)
+        subscription = await self._session.scalar(statement)
+
+        if subscription is None:
+            subscription = Subscription(user_id=user.id, league_id=league.id, is_active=True)
+            self._session.add(subscription)
+            is_active = True
+        else:
+            subscription.is_active = not subscription.is_active
+            is_active = subscription.is_active
+
+        await self._session.flush()
+        return LeagueView(code=league.code, name=league.name), is_active
+
+    async def get_current_round(self, league_code: str) -> CurrentRoundView | None:
+        league = await self._get_active_league_by_code(league_code)
+        if league is None:
+            return None
+
+        statement = (
+            select(Round)
+            .join(Season, Season.id == Round.season_id)
+            .where(Round.league_id == league.id, Season.is_current.is_(True), Round.status == "active")
+            .order_by(desc(Round.round_number))
+            .limit(1)
+        )
+        round_ = await self._session.scalar(statement)
+        if round_ is None:
+            return CurrentRoundView(league=LeagueView(code=league.code, name=league.name), round=None)
+
+        return CurrentRoundView(
+            league=LeagueView(code=league.code, name=league.name),
+            round=ParsedRound(
+                number=round_.round_number,
+                source_url=round_.source_url,
+                matches=await self._load_round_matches(round_),
+            ),
+        )
+
+    async def get_latest_standings(self, league_code: str) -> StandingTableView | None:
+        league = await self._get_active_league_by_code(league_code)
+        if league is None:
+            return None
+
+        statement = (
+            select(StandingSnapshot)
+            .join(Season, Season.id == StandingSnapshot.season_id)
+            .where(
+                StandingSnapshot.league_id == league.id,
+                Season.is_current.is_(True),
+            )
+            .order_by(desc(StandingSnapshot.collected_at))
+            .limit(1)
+        )
+        snapshot = await self._session.scalar(statement)
+        if snapshot is None:
+            return StandingTableView(league=LeagueView(code=league.code, name=league.name), rows=())
+
+        rows = await self._load_standing_rows(snapshot)
+        return StandingTableView(league=LeagueView(code=league.code, name=league.name), rows=rows)
 
     async def _upsert_league(self, data: LeaguePageData) -> League:
         statement = select(League).where(League.source == "kulichki", League.code == data.league.code)
@@ -276,6 +382,58 @@ class FootballDataSqlAlchemyRepository:
                 match_id=match.id,
                 payload={},
             )
+        )
+
+    async def _get_user_by_telegram_id(self, telegram_user_id: int) -> User | None:
+        return await self._session.scalar(select(User).where(User.telegram_user_id == telegram_user_id))
+
+    async def _get_active_league_by_code(self, league_code: str) -> League | None:
+        return await self._session.scalar(
+            select(League).where(League.source == "kulichki", League.code == league_code, League.is_active.is_(True))
+        )
+
+    async def _load_round_matches(self, round_: Round) -> tuple[ParsedMatch, ...]:
+        HomeTeam = aliased(Team)
+        AwayTeam = aliased(Team)
+        statement = (
+            select(Match, HomeTeam.display_name.label("home_name"), AwayTeam.display_name.label("away_name"))
+            .join(HomeTeam, Match.home_team_id == HomeTeam.id)
+            .join(AwayTeam, Match.away_team_id == AwayTeam.id)
+            .where(Match.round_id == round_.id)
+            .order_by(Match.scheduled_at, Match.id)
+        )
+        result = await self._session.execute(statement)
+
+        return tuple(
+            ParsedMatch(
+                home_team=row.home_name,
+                away_team=row.away_name,
+                scheduled_at=row.Match.scheduled_at,
+                home_score=row.Match.home_score,
+                away_score=row.Match.away_score,
+                status=row.Match.status,
+                source_url=row.Match.source_url,
+            )
+            for row in result
+        )
+
+    async def _load_standing_rows(self, snapshot: StandingSnapshot) -> tuple[ParsedStandingRow, ...]:
+        statement = (
+            select(StandingRow, Team.display_name.label("team_name"))
+            .join(Team, StandingRow.team_id == Team.id)
+            .where(StandingRow.snapshot_id == snapshot.id)
+            .order_by(StandingRow.position)
+        )
+        result = await self._session.execute(statement)
+
+        return tuple(
+            ParsedStandingRow(
+                position=row.StandingRow.position,
+                team_name=row.team_name,
+                played=row.StandingRow.played,
+                points=row.StandingRow.points,
+            )
+            for row in result
         )
 
 

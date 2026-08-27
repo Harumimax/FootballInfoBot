@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 
 from app.parser.dto import ParsedMatch, ParsedRound
+from app.services.subscriptions.dto import StandingTableView
+from app.services.subscriptions.dto import LeagueView
 
 
 NO_DATA_MESSAGE = "Данных пока нет."
-
-
-@dataclass(frozen=True)
-class LeagueView:
-    code: str
-    name: str
 
 
 MVP_LEAGUES: tuple[LeagueView, ...] = (
@@ -86,6 +81,18 @@ def render_round_state(league_name: str, round_: ParsedRound | None) -> str:
 
     lines = [f"{league_name}, {round_.number}-й тур", ""]
     lines.extend(_format_match(match) for match in round_.matches)
+    return "\n".join(lines)
+
+
+def render_standings(table: StandingTableView | None) -> str:
+    if table is None or not table.rows:
+        return NO_DATA_MESSAGE
+
+    lines = [f"{table.league.name}. Турнирная таблица", ""]
+    lines.extend(
+        f"{row.position}. {row.team_name} - {row.points if row.points is not None else '-'} очк. ({row.played if row.played is not None else '-'} игр)"
+        for row in table.rows
+    )
     return "\n".join(lines)
 
 

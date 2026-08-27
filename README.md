@@ -32,7 +32,7 @@ The parser uses BeautifulSoup with the standard `html.parser` backend by default
 
 ## Telegram MVP
 
-The current bot skeleton supports `/start`, `/help`, the approved main menu, MVP league buttons, and placeholder responses for subscriptions, standings, and current round requests.
+The current bot supports `/start`, `/help`, the approved main menu, MVP league buttons, subscriptions, latest standings, and current round requests. Live user data is read and written through PostgreSQL when `DATABASE_URL` is configured.
 
 Manual UX can be tested without a live Telegram token or database because message rendering and keyboard builders are pure Python helpers.
 

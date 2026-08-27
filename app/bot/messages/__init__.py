@@ -12,6 +12,7 @@ from app.bot.messages.rendering import (
     render_select_league_for_table_message,
     render_select_subscription_message,
     render_start_message,
+    render_standings,
     render_subscriptions_message,
     render_unsubscribed_message,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "render_select_league_for_table_message",
     "render_select_subscription_message",
     "render_start_message",
+    "render_standings",
     "render_subscriptions_message",
     "render_unsubscribed_message",
 ]

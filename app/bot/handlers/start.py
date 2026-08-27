@@ -4,6 +4,7 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 
+from app.bot.handlers.user_profile import telegram_profile_from_message
 from app.bot.keyboards import (
     CALLBACK_CURRENT_ROUND_PREFIX,
     CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX,
@@ -24,14 +25,26 @@ from app.bot.messages import (
     render_empty_subscriptions_message,
     render_group_not_supported_message,
     render_help_message,
+    render_round_state,
     render_select_league_for_round_message,
     render_select_league_for_table_message,
     render_select_subscription_message,
     render_start_message,
+    render_standings,
+    render_subscriptions_message,
+    render_unsubscribed_message,
 )
+from app.services.subscriptions.user_service import FootballUserService
 
 
-async def handle_private_start(message: Message, admin_user_ids: frozenset[int] | None = None) -> None:
+async def handle_private_start(
+    message: Message,
+    admin_user_ids: frozenset[int] | None = None,
+    football_user_service: FootballUserService | None = None,
+) -> None:
+    if football_user_service is not None:
+        await football_user_service.register_user(telegram_profile_from_message(message))
+
     await message.answer(
         render_start_message(),
         reply_markup=build_main_menu_keyboard(is_admin=_is_admin(message, admin_user_ids)),
@@ -42,12 +55,30 @@ async def handle_private_help(message: Message) -> None:
     await message.answer(render_help_message())
 
 
-async def handle_my_subscriptions(message: Message) -> None:
+async def handle_my_subscriptions(message: Message, football_user_service: FootballUserService | None = None) -> None:
+    telegram_user_id = _telegram_user_id(message)
+    if football_user_service is None or telegram_user_id is None:
+        await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_keyboard())
+        return
+
+    subscriptions = await football_user_service.get_subscriptions(telegram_user_id)
+    if subscriptions:
+        await message.answer(render_subscriptions_message(subscriptions))
+        return
+
     await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_keyboard())
 
 
-async def handle_subscribe_menu(message: Message) -> None:
-    await message.answer(render_select_subscription_message(), reply_markup=build_subscription_keyboard())
+async def handle_subscribe_menu(message: Message, football_user_service: FootballUserService | None = None) -> None:
+    telegram_user_id = _telegram_user_id(message)
+    subscribed_codes = frozenset()
+    if football_user_service is not None and telegram_user_id is not None:
+        subscribed_codes = await football_user_service.get_subscription_codes(telegram_user_id)
+
+    await message.answer(
+        render_select_subscription_message(),
+        reply_markup=build_subscription_keyboard(subscribed_league_codes=subscribed_codes),
+    )
 
 
 async def handle_standings_menu(message: Message) -> None:
@@ -58,25 +89,64 @@ async def handle_current_round_menu(message: Message) -> None:
     await message.answer(render_select_league_for_round_message(), reply_markup=build_current_round_league_keyboard())
 
 
-async def handle_subscription_toggle(callback: CallbackQuery) -> None:
+async def handle_subscription_toggle(
+    callback: CallbackQuery,
+    football_user_service: FootballUserService | None = None,
+) -> None:
     league_code = _strip_callback_prefix(callback.data, CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX)
-    league_name = _league_name_by_code(league_code)
+    telegram_user_id = _callback_user_id(callback)
 
-    await callback.answer(f"Подписка на {league_name} будет подключена на следующем этапе.")
-    if callback.message is not None:
-        await callback.message.answer(NO_DATA_MESSAGE)
+    if football_user_service is None or telegram_user_id is None or not league_code:
+        await callback.answer()
+        if callback.message is not None:
+            await callback.message.answer(NO_DATA_MESSAGE)
+        return
 
+    try:
+        result = await football_user_service.toggle_subscription(
+            telegram_user_id=telegram_user_id,
+            league_code=league_code,
+        )
+    except ValueError:
+        await callback.answer()
+        if callback.message is not None:
+            await callback.message.answer(NO_DATA_MESSAGE)
+        return
 
-async def handle_table_selected(callback: CallbackQuery) -> None:
     await callback.answer()
     if callback.message is not None:
-        await callback.message.answer(NO_DATA_MESSAGE)
+        if result.is_active:
+            await callback.message.answer(render_round_state(result.league.name, result.current_round))
+        else:
+            await callback.message.answer(render_unsubscribed_message(_league_name_for_unsubscribe(result.league.code, result.league.name)))
 
 
-async def handle_current_round_selected(callback: CallbackQuery) -> None:
+async def handle_table_selected(callback: CallbackQuery, football_user_service: FootballUserService | None = None) -> None:
     await callback.answer()
+    league_code = _strip_callback_prefix(callback.data, CALLBACK_TABLE_PREFIX)
+    table = None
+    if football_user_service is not None and league_code:
+        table = await football_user_service.get_latest_standings(league_code)
+
     if callback.message is not None:
-        await callback.message.answer(NO_DATA_MESSAGE)
+        await callback.message.answer(render_standings(table))
+
+
+async def handle_current_round_selected(
+    callback: CallbackQuery,
+    football_user_service: FootballUserService | None = None,
+) -> None:
+    await callback.answer()
+    league_code = _strip_callback_prefix(callback.data, CALLBACK_CURRENT_ROUND_PREFIX)
+    round_view = None
+    if football_user_service is not None and league_code:
+        round_view = await football_user_service.get_current_round(league_code)
+
+    if callback.message is not None:
+        if round_view is None:
+            await callback.message.answer(NO_DATA_MESSAGE)
+        else:
+            await callback.message.answer(render_round_state(round_view.league.name, round_view.round))
 
 
 async def handle_group_message(message: Message) -> None:
@@ -116,6 +186,26 @@ def _league_name_by_code(code: str) -> str:
         if league.code == code:
             return league.name
     return code
+
+
+def _league_name_for_unsubscribe(code: str, default_name: str) -> str:
+    names = {
+        "england": "Англии",
+        "spain": "Испании",
+    }
+    return names.get(code, default_name)
+
+
+def _telegram_user_id(message: Message) -> int | None:
+    if message.from_user is None:
+        return None
+    return message.from_user.id
+
+
+def _callback_user_id(callback: CallbackQuery) -> int | None:
+    if callback.from_user is None:
+        return None
+    return callback.from_user.id
 
 
 router = create_start_router()
