@@ -53,6 +53,8 @@ Until real parser status and update commands are wired to PostgreSQL, admin acti
 
 The production database is PostgreSQL. Schema changes are managed through Alembic migrations.
 
+Application code uses the async SQLAlchemy session layer from `app.storage.session`. `Database.session()` opens a transaction-scoped session, commits successful work, rolls back failed work, and closes the connection resources through `Database.dispose()`.
+
 Generate offline SQL without a local database:
 
 ```powershell
