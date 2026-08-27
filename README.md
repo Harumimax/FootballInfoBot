@@ -65,6 +65,19 @@ League sync is owned by `LeagueSyncService`. It fetches a configured league page
 
 The first implementation is testable with fake clients and repositories, so it does not require local PostgreSQL.
 
+## Push Notifications
+
+Push notification rules are owned by `PushNotificationService`.
+
+MVP rules:
+
+- morning push runs at `09:00 Europe/Moscow`;
+- morning push is sent only when the current round has at least one match today;
+- every push contains the full current round state, not only today's matches;
+- after-matchday checks run at `23:00`, then hourly at `00:00`, `01:00`, `02:00`, and `03:00`;
+- if matches are still unresolved at `03:00`, the service sends the round state as-is only when there were matches today and changes worth reporting;
+- duplicate pushes are prevented by a notification dedupe key.
+
 ## MVP Source
 
 The initial football data source is `football.kulichki.net`.
