@@ -30,6 +30,16 @@ The parser uses BeautifulSoup with the standard `html.parser` backend by default
 - `football-info-bot`: Telegram bot process.
 - `football-info-worker`: scheduled parser, update, notification, and cleanup jobs.
 
+## Database
+
+The production database is PostgreSQL. Schema changes are managed through Alembic migrations.
+
+Generate offline SQL without a local database:
+
+```powershell
+.\.venv\Scripts\python -m alembic upgrade head --sql
+```
+
 ## MVP Source
 
 The initial football data source is `football.kulichki.net`.
