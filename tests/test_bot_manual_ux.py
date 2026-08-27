@@ -32,6 +32,7 @@ from app.bot.messages import (
     render_group_not_supported_message,
     render_help_message,
     render_round_state,
+    render_rounds_state,
     render_start_message,
     render_standings,
     render_subscriptions_message,
@@ -200,6 +201,25 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(callback.answers, [""])
         self.assertEqual(callback.message.answers[0].text, render_round_state("Испания", round_))
 
+    async def test_subscription_toggle_sends_visible_rounds_when_enabled(self) -> None:
+        round_ = _sample_round()
+        catch_up_round = _catch_up_round()
+        service = FakeFootballUserService(
+            toggle_result=SubscriptionToggleResult(
+                league=LeagueView(code="spain", name="Испания"),
+                is_active=True,
+                current_round=round_,
+                current_rounds=(round_, catch_up_round),
+            )
+        )
+        callback = FakeCallback(data=f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}spain", user_id=123)
+
+        await handle_subscription_toggle(callback, football_user_service=service)
+
+        self.assertEqual(callback.message.answers[0].text, render_rounds_state("Испания", (round_, catch_up_round)))
+        self.assertIn("3-й тур", callback.message.answers[0].text)
+        self.assertIn("1-й тур", callback.message.answers[0].text)
+
     async def test_subscription_toggle_sends_unsubscribed_message_when_disabled(self) -> None:
         service = FakeFootballUserService(
             toggle_result=SubscriptionToggleResult(
@@ -236,6 +256,23 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(service.requested_rounds, ["spain"])
         self.assertEqual(callback.message.answers[0].text, render_round_state("Испания", round_view.round))
+
+    async def test_current_round_selected_sends_visible_rounds_with_round_labels(self) -> None:
+        round_ = _sample_round()
+        catch_up_round = _catch_up_round()
+        round_view = CurrentRoundView(
+            league=LeagueView(code="spain", name="Испания"),
+            round=round_,
+            rounds=(round_, catch_up_round),
+        )
+        service = FakeFootballUserService(current_round=round_view)
+        callback = FakeCallback(data=f"{CALLBACK_CURRENT_ROUND_PREFIX}spain", user_id=123)
+
+        await handle_current_round_selected(callback, football_user_service=service)
+
+        self.assertEqual(callback.message.answers[0].text, render_rounds_state("Испания", (round_, catch_up_round)))
+        self.assertIn("3-й тур", callback.message.answers[0].text)
+        self.assertIn("1-й тур", callback.message.answers[0].text)
 
 
 class FakeAnswer:
@@ -328,6 +365,23 @@ def _sample_round() -> ParsedRound:
                 home_team="Реал",
                 away_team="Барселона",
                 scheduled_at=datetime(2026, 8, 21, 20, 0),
+                home_score=None,
+                away_score=None,
+                status="scheduled",
+            ),
+        ),
+    )
+
+
+def _catch_up_round() -> ParsedRound:
+    return ParsedRound(
+        number=1,
+        source_url="https://football.kulichki.net/spain/2027/1/",
+        matches=(
+            ParsedMatch(
+                home_team="Барселона",
+                away_team="Атлетик",
+                scheduled_at=datetime(2026, 8, 27, 22, 0),
                 home_score=None,
                 away_score=None,
                 status="scheduled",

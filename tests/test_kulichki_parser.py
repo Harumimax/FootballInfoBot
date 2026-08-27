@@ -101,6 +101,12 @@ class KulichkiParserTest(unittest.TestCase):
 
         self.assertEqual(data.standings[0].team_name, "Брайтон")
         self.assertEqual(data.standings[0].played, 1)
+        self.assertEqual(data.standings[0].wins, 1)
+        self.assertEqual(data.standings[0].draws, 0)
+        self.assertEqual(data.standings[0].losses, 0)
+        self.assertEqual(data.standings[0].goals_for, 4)
+        self.assertEqual(data.standings[0].goals_against, 0)
+        self.assertEqual(data.standings[0].goal_difference, 4)
         self.assertEqual(data.standings[0].points, 3)
 
     def test_parse_live_round_page_extracts_finished_matches_without_time(self) -> None:
@@ -158,6 +164,17 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertTrue(all("/spain/2027/1/" in (match.source_url or "") for match in catch_up_round.matches))
         self.assertEqual(catch_up_round.matches[-1].home_team, "Барселона")
         self.assertEqual(catch_up_round.matches[-1].away_team, "Атлетик")
+
+        first_standing = data.standings[0]
+        self.assertEqual(first_standing.team_name, "Реал Мадрид")
+        self.assertEqual(first_standing.played, 2)
+        self.assertEqual(first_standing.wins, 2)
+        self.assertEqual(first_standing.draws, 0)
+        self.assertEqual(first_standing.losses, 0)
+        self.assertEqual(first_standing.goals_for, 6)
+        self.assertEqual(first_standing.goals_against, 2)
+        self.assertEqual(first_standing.goal_difference, 4)
+        self.assertEqual(first_standing.points, 6)
 
 
 def _read_fixture(name: str) -> str:

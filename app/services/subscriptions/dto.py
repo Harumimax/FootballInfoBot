@@ -24,6 +24,7 @@ class SubscriptionToggleResult:
     league: LeagueView
     is_active: bool
     current_round: ParsedRound | None
+    current_rounds: tuple[ParsedRound, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -36,3 +37,4 @@ class StandingTableView:
 class CurrentRoundView:
     league: LeagueView
     round: ParsedRound | None
+    rounds: tuple[ParsedRound, ...] = ()

@@ -445,6 +445,11 @@ def _extract_standings(soup: BeautifulSoup) -> list[ParsedStandingRow]:
                 team_name=team_name,
                 played=_parse_int(_select_text(row, "[data-played], .played")),
                 points=_parse_int(_select_text(row, "[data-points], .points")),
+                wins=_parse_int(_select_text(row, "[data-wins], .wins")),
+                draws=_parse_int(_select_text(row, "[data-draws], .draws")),
+                losses=_parse_int(_select_text(row, "[data-losses], .losses")),
+                goals_for=_parse_int(_select_text(row, "[data-goals-for], .goals-for")),
+                goals_against=_parse_int(_select_text(row, "[data-goals-against], .goals-against")),
             )
         )
 
@@ -467,6 +472,12 @@ def _extract_standings(soup: BeautifulSoup) -> list[ParsedStandingRow]:
                     position=position,
                     team_name=_clean_team_name(cells[1]),
                     played=_parse_int(cells[2]),
+                    wins=_parse_int(cells[3]),
+                    draws=_parse_int(cells[4]),
+                    losses=_parse_int(cells[5]),
+                    goals_for=_parse_goals_pair(cells[6])[0],
+                    goals_against=_parse_goals_pair(cells[6])[1],
+                    goal_difference=_parse_goal_difference(cells[6]),
                     points=_parse_int(cells[-1]),
                 )
             )
@@ -528,6 +539,20 @@ def _parse_int(value: str) -> int | None:
         return None
     match = re.search(r"\d+", cleaned)
     return int(match.group(0)) if match else None
+
+
+def _parse_goals_pair(value: str) -> tuple[int | None, int | None]:
+    match = SCORE_RE.search(value.strip())
+    if match is None:
+        return None, None
+    return int(match.group("home")), int(match.group("away"))
+
+
+def _parse_goal_difference(value: str) -> int | None:
+    goals_for, goals_against = _parse_goals_pair(value)
+    if goals_for is None or goals_against is None:
+        return None
+    return goals_for - goals_against
 
 
 def _extract_first_link(row: Tag, *, page_url: str) -> str | None:

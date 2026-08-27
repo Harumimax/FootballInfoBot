@@ -65,10 +65,18 @@ class FootballUserService:
             league_code=league_code,
         )
         current_round: ParsedRound | None = None
+        current_rounds: tuple[ParsedRound, ...] = ()
         if is_active:
             round_view = await self._repository.get_current_round(league_code)
-            current_round = round_view.round if round_view is not None else None
-        return SubscriptionToggleResult(league=league, is_active=is_active, current_round=current_round)
+            if round_view is not None:
+                current_round = round_view.round
+                current_rounds = round_view.rounds
+        return SubscriptionToggleResult(
+            league=league,
+            is_active=is_active,
+            current_round=current_round,
+            current_rounds=current_rounds,
+        )
 
     async def get_current_round(self, league_code: str) -> CurrentRoundView | None:
         return await self._repository.get_current_round(league_code)

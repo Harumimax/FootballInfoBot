@@ -35,6 +35,12 @@ class ParsedStandingRow:
     team_name: str
     played: int | None
     points: int | None
+    wins: int | None = None
+    draws: int | None = None
+    losses: int | None = None
+    goals_for: int | None = None
+    goals_against: int | None = None
+    goal_difference: int | None = None
 
 
 @dataclass(frozen=True)

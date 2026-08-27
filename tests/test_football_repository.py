@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 
-from app.parser.dto import LeaguePageData, ParsedLeague, ParsedMatch, ParsedRound
-from app.storage.models import Round
+from app.parser.dto import LeaguePageData, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow
+from app.storage.models import Round, StandingRow
 from app.storage.repositories import FootballDataSqlAlchemyRepository
 
 
@@ -93,6 +93,44 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([round_.status for round_ in added_rounds], ["active", "planned"])
         self.assertEqual(result.created_matches, 2)
         self.assertEqual(result.created_change_events, 2)
+
+    async def test_save_league_page_data_persists_standing_details(self) -> None:
+        session = FakeAsyncSession()
+        repository = FootballDataSqlAlchemyRepository(session)
+        data = LeaguePageData(
+            league=ParsedLeague(code="spain", name="Испания", source_url="https://football.kulichki.net/spain/"),
+            season_label="2026/2027",
+            source_season_key="2027",
+            current_round=None,
+            standings=(
+                ParsedStandingRow(
+                    position=1,
+                    team_name="Реал Мадрид",
+                    played=2,
+                    wins=2,
+                    draws=0,
+                    losses=0,
+                    goals_for=6,
+                    goals_against=2,
+                    goal_difference=4,
+                    points=6,
+                ),
+            ),
+        )
+
+        await repository.save_league_page_data(data)
+
+        added_standing_rows = [entity for entity in session.added if isinstance(entity, StandingRow)]
+        self.assertEqual(len(added_standing_rows), 1)
+        standing_row = added_standing_rows[0]
+        self.assertEqual(standing_row.played, 2)
+        self.assertEqual(standing_row.wins, 2)
+        self.assertEqual(standing_row.draws, 0)
+        self.assertEqual(standing_row.losses, 0)
+        self.assertEqual(standing_row.goals_for, 6)
+        self.assertEqual(standing_row.goals_against, 2)
+        self.assertEqual(standing_row.goal_difference, 4)
+        self.assertEqual(standing_row.points, 6)
 
 
 if __name__ == "__main__":

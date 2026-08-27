@@ -41,12 +41,12 @@ class DeployConfigurationTest(unittest.TestCase):
         self.assertIn("docker compose --profile tools run --rm migrate", workflow)
         self.assertIn("docker compose up -d bot worker", workflow)
 
-    def test_readme_documents_botfather_without_committing_token(self) -> None:
-        readme = _read("README.md")
+    def test_env_example_declares_token_without_committing_secret(self) -> None:
+        env_example = _read(".env.example")
 
-        self.assertIn("@BotFather", readme)
-        self.assertIn("Never commit the BotFather token.", readme)
-        self.assertIn("TELEGRAM_BOT_TOKEN=<token from BotFather>", readme)
+        self.assertIn("TELEGRAM_BOT_TOKEN=", env_example)
+        self.assertNotIn("8998106305", env_example)
+        self.assertNotIn("AAEl3", env_example)
 
 
 def _read(relative_path: str) -> str:

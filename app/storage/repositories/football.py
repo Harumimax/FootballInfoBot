@@ -204,16 +204,19 @@ class FootballDataSqlAlchemyRepository:
         if league is None:
             return None
 
-        statement = (
+        active_round_statement = (
             select(Round)
             .join(Season, Season.id == Round.season_id)
             .where(Round.league_id == league.id, Season.is_current.is_(True), Round.status == "active")
             .order_by(desc(Round.round_number))
             .limit(1)
         )
-        round_ = await self._session.scalar(statement)
+        round_ = await self._session.scalar(active_round_statement)
         if round_ is None:
             return CurrentRoundView(league=LeagueView(code=league.code, name=league.name), round=None)
+
+        season = await self._get_current_season(league)
+        rounds = await self._load_current_visible_rounds(league, season) if season is not None else ()
 
         return CurrentRoundView(
             league=LeagueView(code=league.code, name=league.name),
@@ -222,6 +225,7 @@ class FootballDataSqlAlchemyRepository:
                 source_url=round_.source_url,
                 matches=await self._load_round_matches(round_),
             ),
+            rounds=rounds,
         )
 
     async def get_latest_standings(self, league_code: str) -> StandingTableView | None:
@@ -506,12 +510,12 @@ class FootballDataSqlAlchemyRepository:
                     team_id=team.id,
                     position=row.position,
                     played=row.played,
-                    wins=None,
-                    draws=None,
-                    losses=None,
-                    goals_for=None,
-                    goals_against=None,
-                    goal_difference=None,
+                    wins=row.wins,
+                    draws=row.draws,
+                    losses=row.losses,
+                    goals_for=row.goals_for,
+                    goals_against=row.goals_against,
+                    goal_difference=row.goal_difference,
                     points=row.points,
                     raw_values={},
                 )
@@ -594,6 +598,33 @@ class FootballDataSqlAlchemyRepository:
                 rounds.append(parsed_round)
         return tuple(rounds)
 
+    async def _load_current_visible_rounds(self, league: League, season: Season) -> tuple[ParsedRound, ...]:
+        statement = (
+            select(Round)
+            .outerjoin(Match, Match.round_id == Round.id)
+            .where(
+                Round.league_id == league.id,
+                Round.season_id == season.id,
+                Round.status.in_(("active", "planned")),
+            )
+            .order_by(desc(Round.status == "active"), desc(Round.round_number))
+        )
+        result = await self._session.scalars(statement)
+        rounds = []
+        seen_round_ids = set()
+        for round_ in result:
+            if round_.id in seen_round_ids:
+                continue
+            seen_round_ids.add(round_.id)
+            parsed_round = ParsedRound(
+                number=round_.round_number,
+                source_url=round_.source_url,
+                matches=await self._load_round_matches(round_),
+            )
+            if parsed_round.matches:
+                rounds.append(parsed_round)
+        return tuple(rounds)
+
     async def _has_match_changes_for_date(self, league: League, match_date) -> bool:  # noqa: ANN001
         event_id = await self._session.scalar(
             select(DataChangeEvent.id)
@@ -646,6 +677,12 @@ class FootballDataSqlAlchemyRepository:
                 team_name=team_name,
                 played=standing_row.played,
                 points=standing_row.points,
+                wins=standing_row.wins,
+                draws=standing_row.draws,
+                losses=standing_row.losses,
+                goals_for=standing_row.goals_for,
+                goals_against=standing_row.goals_against,
+                goal_difference=standing_row.goal_difference,
             )
             for standing_row, team_name in result
         )

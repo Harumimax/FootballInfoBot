@@ -26,6 +26,7 @@ from app.bot.messages import (
     render_group_not_supported_message,
     render_help_message,
     render_round_state,
+    render_rounds_state,
     render_select_league_for_round_message,
     render_select_league_for_table_message,
     render_select_subscription_message,
@@ -116,7 +117,12 @@ async def handle_subscription_toggle(
     await callback.answer()
     if callback.message is not None:
         if result.is_active:
-            await callback.message.answer(render_round_state(result.league.name, result.current_round))
+            text = (
+                render_rounds_state(result.league.name, result.current_rounds)
+                if result.current_rounds
+                else render_round_state(result.league.name, result.current_round)
+            )
+            await callback.message.answer(text)
         else:
             await callback.message.answer(render_unsubscribed_message(_league_name_for_unsubscribe(result.league.code, result.league.name)))
 
@@ -146,7 +152,12 @@ async def handle_current_round_selected(
         if round_view is None:
             await callback.message.answer(NO_DATA_MESSAGE)
         else:
-            await callback.message.answer(render_round_state(round_view.league.name, round_view.round))
+            text = (
+                render_rounds_state(round_view.league.name, round_view.rounds)
+                if round_view.rounds
+                else render_round_state(round_view.league.name, round_view.round)
+            )
+            await callback.message.answer(text)
 
 
 async def handle_group_message(message: Message) -> None:
