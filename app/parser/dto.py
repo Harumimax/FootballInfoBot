@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -44,6 +44,7 @@ class LeaguePageData:
     source_season_key: str | None
     current_round: ParsedRound | None
     standings: tuple[ParsedStandingRow, ...]
+    rounds: tuple[ParsedRound, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

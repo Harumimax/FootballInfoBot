@@ -128,13 +128,16 @@ class LeagueSyncService:
             )
 
             current_round = parsed_data.current_round
+            parsed_matches = sum(len(round_.matches) for round_ in parsed_data.rounds)
+            if parsed_matches == 0 and current_round is not None:
+                parsed_matches = len(current_round.matches)
             return LeagueSyncResult(
                 league_code=league.code,
                 status="success",
                 fetched_url=page.url,
                 http_status=page.status_code,
                 current_round_number=current_round.number if current_round is not None else None,
-                parsed_matches=len(current_round.matches) if current_round is not None else 0,
+                parsed_matches=parsed_matches,
                 parsed_standings_rows=len(parsed_data.standings),
                 created_matches=save_result.created_matches,
                 updated_matches=save_result.updated_matches,

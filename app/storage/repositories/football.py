@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.parser.dto import LeaguePageData, ParsedMatch, ParsedStandingRow
+from app.parser.dto import LeaguePageData, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.services.updates.sync import ParserRunDraft, SaveLeaguePageResult
 from app.storage.models import (
     DataChangeEvent,
@@ -36,15 +36,20 @@ class FootballDataSqlAlchemyRepository:
     async def save_league_page_data(self, data: LeaguePageData) -> SaveLeaguePageResult:
         league = await self._upsert_league(data)
         season = await self._upsert_season(league, data)
-        current_round = await self._upsert_current_round(league, season, data)
 
         created_matches = 0
         updated_matches = 0
         created_change_events = 0
 
-        if data.current_round is not None and current_round is not None:
-            for parsed_match in data.current_round.matches:
-                result = await self._upsert_match(league, season, current_round, parsed_match)
+        for parsed_round in _iter_league_rounds(data):
+            round_ = await self._upsert_round(
+                league,
+                season,
+                parsed_round,
+                is_current=data.current_round is not None and parsed_round.number == data.current_round.number,
+            )
+            for parsed_match in parsed_round.matches:
+                result = await self._upsert_match(league, season, round_, parsed_match)
                 if result.created:
                     created_matches += 1
                     await self._add_change_event("match_created", league=league, match=result.match)
@@ -124,13 +129,10 @@ class FootballDataSqlAlchemyRepository:
         await self._session.flush()
         return season
 
-    async def _upsert_current_round(self, league: League, season: Season, data: LeaguePageData) -> Round | None:
-        if data.current_round is None:
-            return None
-
+    async def _upsert_round(self, league: League, season: Season, parsed_round: ParsedRound, *, is_current: bool) -> Round:
         statement = select(Round).where(
             Round.season_id == season.id,
-            Round.round_number == data.current_round.number,
+            Round.round_number == parsed_round.number,
         )
         round_ = await self._session.scalar(statement)
 
@@ -138,15 +140,16 @@ class FootballDataSqlAlchemyRepository:
             round_ = Round(
                 league_id=league.id,
                 season_id=season.id,
-                round_number=data.current_round.number,
-                source_url=data.current_round.source_url,
-                status="active",
+                round_number=parsed_round.number,
+                source_url=parsed_round.source_url,
+                status="active" if is_current else "planned",
             )
             self._session.add(round_)
         else:
             round_.league_id = league.id
-            round_.source_url = data.current_round.source_url
-            round_.status = "active"
+            round_.source_url = parsed_round.source_url
+            if is_current:
+                round_.status = "active"
 
         await self._session.flush()
         return round_
@@ -278,3 +281,11 @@ class FootballDataSqlAlchemyRepository:
 
 def normalize_team_name(source_name: str) -> str:
     return re.sub(r"\s+", " ", source_name.strip().casefold())
+
+
+def _iter_league_rounds(data: LeaguePageData) -> tuple[ParsedRound, ...]:
+    if data.rounds:
+        return data.rounds
+    if data.current_round is not None:
+        return (data.current_round,)
+    return ()

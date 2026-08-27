@@ -77,6 +77,30 @@ class LeagueSyncServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(repository.saved_pages), 1)
         self.assertEqual(repository.parser_runs[-1].status, "success")
 
+    async def test_sync_league_counts_all_visible_round_matches(self) -> None:
+        html = _read_fixture("spain_league_live.html")
+        client = FakePageClient(
+            FetchedPage(
+                url="https://football.kulichki.net/spain/",
+                html=html,
+                status_code=200,
+            )
+        )
+        service = LeagueSyncService(
+            page_client=client,
+            parser=KulichkiParser(base_url="https://football.kulichki.net"),
+            repository=FakeFootballDataRepository(),
+            league_sources=(
+                LeagueSource(code="spain", name="Испания", url="https://football.kulichki.net/spain/"),
+            ),
+        )
+
+        result = await service.sync_league("spain")
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.current_round_number, 3)
+        self.assertEqual(result.parsed_matches, 14)
+
     async def test_sync_league_records_failed_parser_run_when_fetch_fails(self) -> None:
         client = FakePageClient(error=RuntimeError("source unavailable"))
         repository = FakeFootballDataRepository()

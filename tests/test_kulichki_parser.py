@@ -66,6 +66,99 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(data.round.matches[1].away_score, 1)
         self.assertEqual(data.round.matches[1].status, "finished")
 
+    def test_parse_live_league_page_extracts_real_kulichki_markup(self) -> None:
+        html = _read_fixture("england_league_live.html")
+
+        data = self.parser.parse_league_page(
+            html,
+            url="https://football.kulichki.net/england/",
+            league_code="england",
+            league_name="Англия",
+        )
+
+        self.assertEqual(data.season_label, "2026/2027")
+        self.assertEqual(data.source_season_key, "2027")
+        self.assertIsNotNone(data.current_round)
+        assert data.current_round is not None
+        self.assertEqual(data.current_round.number, 2)
+        self.assertEqual(data.current_round.source_url, "https://football.kulichki.net/england/2027/2/")
+        self.assertEqual(len(data.current_round.matches), 10)
+        self.assertEqual(len(data.standings), 20)
+
+        first_match = data.current_round.matches[0]
+        self.assertEqual(first_match.home_team, "Кристал Пэлас")
+        self.assertEqual(first_match.away_team, "Манчестер Сити")
+        self.assertIsNotNone(first_match.scheduled_at)
+        assert first_match.scheduled_at is not None
+        self.assertEqual(first_match.scheduled_at.strftime("%Y-%m-%d %H:%M"), "2026-08-28 22:00")
+        self.assertIsNone(first_match.home_score)
+        self.assertIsNone(first_match.away_score)
+        self.assertEqual(first_match.status, "scheduled")
+        self.assertEqual(
+            first_match.source_url,
+            "https://football.kulichki.net/england/2027/2/4a-Kristal-Pelas-Manchester-Siti-anons-matcha-england-2027.htm",
+        )
+
+        self.assertEqual(data.standings[0].team_name, "Брайтон")
+        self.assertEqual(data.standings[0].played, 1)
+        self.assertEqual(data.standings[0].points, 3)
+
+    def test_parse_live_round_page_extracts_finished_matches_without_time(self) -> None:
+        html = _read_fixture("spain_round_live.html")
+
+        data = self.parser.parse_round_page(
+            html,
+            url="https://football.kulichki.net/spain/2027/2/",
+            league_code="spain",
+            league_name="Испания",
+        )
+
+        self.assertEqual(data.season_label, "2026/2027")
+        self.assertEqual(data.round.number, 2)
+        self.assertEqual(len(data.round.matches), 10)
+
+        first_match = data.round.matches[0]
+        self.assertEqual(first_match.home_team, "Райо Вальекано")
+        self.assertEqual(first_match.away_team, "Алавес")
+        self.assertIsNotNone(first_match.scheduled_at)
+        assert first_match.scheduled_at is not None
+        self.assertEqual(first_match.scheduled_at.strftime("%Y-%m-%d %H:%M"), "2026-08-20 00:00")
+        self.assertEqual(first_match.home_score, 1)
+        self.assertEqual(first_match.away_score, 1)
+        self.assertEqual(first_match.status, "finished")
+        self.assertEqual(
+            first_match.source_url,
+            "https://football.kulichki.net/spain/2027/2/7-Rajo-Valekano-Alaves-obzor-matcha-spain-2027.htm",
+        )
+
+    def test_parse_live_league_page_groups_current_and_catch_up_rounds(self) -> None:
+        html = _read_fixture("spain_league_live.html")
+
+        data = self.parser.parse_league_page(
+            html,
+            url="https://football.kulichki.net/spain/",
+            league_code="spain",
+            league_name="Испания",
+        )
+
+        self.assertIsNotNone(data.current_round)
+        assert data.current_round is not None
+        self.assertEqual(data.current_round.number, 3)
+        self.assertEqual(data.current_round.source_url, "https://football.kulichki.net/spain/2027/3/")
+        self.assertEqual(len(data.current_round.matches), 10)
+        self.assertTrue(all("/spain/2027/3/" in (match.source_url or "") for match in data.current_round.matches))
+        self.assertEqual(data.current_round.matches[-1].home_team, "Барселона")
+        self.assertEqual(data.current_round.matches[-1].away_team, "Райо Вальекано")
+        self.assertEqual(data.current_round.matches[-1].scheduled_at.strftime("%Y-%m-%d %H:%M"), "2026-08-31 22:30")
+
+        self.assertEqual([round_.number for round_ in data.rounds], [3, 1])
+        catch_up_round = data.rounds[1]
+        self.assertEqual(catch_up_round.source_url, "https://football.kulichki.net/spain/2027/1/")
+        self.assertEqual(len(catch_up_round.matches), 4)
+        self.assertTrue(all("/spain/2027/1/" in (match.source_url or "") for match in catch_up_round.matches))
+        self.assertEqual(catch_up_round.matches[-1].home_team, "Барселона")
+        self.assertEqual(catch_up_round.matches[-1].away_team, "Атлетик")
+
 
 def _read_fixture(name: str) -> str:
     return (FIXTURES_DIR / name).read_text(encoding="utf-8")
