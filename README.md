@@ -36,6 +36,19 @@ The current bot skeleton supports `/start`, `/help`, the approved main menu, MVP
 
 Manual UX can be tested without a live Telegram token or database because message rendering and keyboard builders are pure Python helpers.
 
+## Admin MVP
+
+Admin mode is available only for Telegram user ids listed in `ADMIN_USER_IDS`.
+
+The current admin skeleton supports:
+
+- `Обновить лигу`;
+- `Статус парсера`;
+- `Последняя ошибка`;
+- `Включить/отключить лигу`.
+
+Until real parser status and update commands are wired to PostgreSQL, admin actions return safe placeholder messages.
+
 ## Database
 
 The production database is PostgreSQL. Schema changes are managed through Alembic migrations.

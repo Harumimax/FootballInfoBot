@@ -15,8 +15,25 @@ from app.bot.keyboards.main import (
     build_subscription_keyboard,
     build_table_league_keyboard,
 )
+from app.bot.keyboards.admin import (
+    CALLBACK_ADMIN_LAST_ERROR,
+    CALLBACK_ADMIN_STATUS,
+    CALLBACK_ADMIN_SYNC_MENU,
+    CALLBACK_ADMIN_SYNC_PREFIX,
+    CALLBACK_ADMIN_TOGGLE_MENU,
+    CALLBACK_ADMIN_TOGGLE_PREFIX,
+    build_admin_keyboard,
+    build_admin_sync_league_keyboard,
+    build_admin_toggle_league_keyboard,
+)
 
 __all__ = [
+    "CALLBACK_ADMIN_LAST_ERROR",
+    "CALLBACK_ADMIN_STATUS",
+    "CALLBACK_ADMIN_SYNC_MENU",
+    "CALLBACK_ADMIN_SYNC_PREFIX",
+    "CALLBACK_ADMIN_TOGGLE_MENU",
+    "CALLBACK_ADMIN_TOGGLE_PREFIX",
     "CALLBACK_CURRENT_ROUND_PREFIX",
     "CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX",
     "CALLBACK_TABLE_PREFIX",
@@ -26,6 +43,9 @@ __all__ = [
     "MENU_MY_SUBSCRIPTIONS",
     "MENU_STANDINGS",
     "MENU_SUBSCRIBE",
+    "build_admin_keyboard",
+    "build_admin_sync_league_keyboard",
+    "build_admin_toggle_league_keyboard",
     "build_current_round_league_keyboard",
     "build_main_menu_keyboard",
     "build_subscription_keyboard",

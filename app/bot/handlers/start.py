@@ -31,10 +31,6 @@ from app.bot.messages import (
 )
 
 
-router = Router(name="start")
-
-
-@router.message(CommandStart(), F.chat.type == "private")
 async def handle_private_start(message: Message, admin_user_ids: frozenset[int] | None = None) -> None:
     await message.answer(
         render_start_message(),
@@ -42,33 +38,26 @@ async def handle_private_start(message: Message, admin_user_ids: frozenset[int] 
     )
 
 
-@router.message(Command("help"), F.chat.type == "private")
-@router.message(F.text == MENU_HELP, F.chat.type == "private")
 async def handle_private_help(message: Message) -> None:
     await message.answer(render_help_message())
 
 
-@router.message(F.text == MENU_MY_SUBSCRIPTIONS, F.chat.type == "private")
 async def handle_my_subscriptions(message: Message) -> None:
     await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_keyboard())
 
 
-@router.message(F.text == MENU_SUBSCRIBE, F.chat.type == "private")
 async def handle_subscribe_menu(message: Message) -> None:
     await message.answer(render_select_subscription_message(), reply_markup=build_subscription_keyboard())
 
 
-@router.message(F.text == MENU_STANDINGS, F.chat.type == "private")
 async def handle_standings_menu(message: Message) -> None:
     await message.answer(render_select_league_for_table_message(), reply_markup=build_table_league_keyboard())
 
 
-@router.message(F.text == MENU_CURRENT_ROUND, F.chat.type == "private")
 async def handle_current_round_menu(message: Message) -> None:
     await message.answer(render_select_league_for_round_message(), reply_markup=build_current_round_league_keyboard())
 
 
-@router.callback_query(F.data.startswith(CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX))
 async def handle_subscription_toggle(callback: CallbackQuery) -> None:
     league_code = _strip_callback_prefix(callback.data, CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX)
     league_name = _league_name_by_code(league_code)
@@ -78,23 +67,36 @@ async def handle_subscription_toggle(callback: CallbackQuery) -> None:
         await callback.message.answer(NO_DATA_MESSAGE)
 
 
-@router.callback_query(F.data.startswith(CALLBACK_TABLE_PREFIX))
 async def handle_table_selected(callback: CallbackQuery) -> None:
     await callback.answer()
     if callback.message is not None:
         await callback.message.answer(NO_DATA_MESSAGE)
 
 
-@router.callback_query(F.data.startswith(CALLBACK_CURRENT_ROUND_PREFIX))
 async def handle_current_round_selected(callback: CallbackQuery) -> None:
     await callback.answer()
     if callback.message is not None:
         await callback.message.answer(NO_DATA_MESSAGE)
 
 
-@router.message(F.chat.type.in_({"group", "supergroup"}))
 async def handle_group_message(message: Message) -> None:
     await message.answer(render_group_not_supported_message())
+
+
+def create_start_router() -> Router:
+    router = Router(name="start")
+    router.message(CommandStart(), F.chat.type == "private")(handle_private_start)
+    router.message(Command("help"), F.chat.type == "private")(handle_private_help)
+    router.message(F.text == MENU_HELP, F.chat.type == "private")(handle_private_help)
+    router.message(F.text == MENU_MY_SUBSCRIPTIONS, F.chat.type == "private")(handle_my_subscriptions)
+    router.message(F.text == MENU_SUBSCRIBE, F.chat.type == "private")(handle_subscribe_menu)
+    router.message(F.text == MENU_STANDINGS, F.chat.type == "private")(handle_standings_menu)
+    router.message(F.text == MENU_CURRENT_ROUND, F.chat.type == "private")(handle_current_round_menu)
+    router.callback_query(F.data.startswith(CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX))(handle_subscription_toggle)
+    router.callback_query(F.data.startswith(CALLBACK_TABLE_PREFIX))(handle_table_selected)
+    router.callback_query(F.data.startswith(CALLBACK_CURRENT_ROUND_PREFIX))(handle_current_round_selected)
+    router.message(F.chat.type.in_({"group", "supergroup"}))(handle_group_message)
+    return router
 
 
 def _is_admin(message: Message, admin_user_ids: frozenset[int] | None) -> bool:
@@ -114,3 +116,6 @@ def _league_name_by_code(code: str) -> str:
         if league.code == code:
             return league.name
     return code
+
+
+router = create_start_router()
