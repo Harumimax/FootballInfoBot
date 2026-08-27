@@ -55,3 +55,63 @@ The first implementation is testable with fake clients and repositories, so it d
 ## MVP Source
 
 The initial football data source is `football.kulichki.net`.
+
+## BotFather
+
+Create the Telegram bot before the first real VPS deployment:
+
+1. Open Telegram and start a chat with `@BotFather`.
+2. Run `/newbot`.
+3. Choose a display name and username.
+4. Copy the token.
+5. Put the token only into the VPS `.env` file as `TELEGRAM_BOT_TOKEN`.
+
+Never commit the BotFather token.
+
+## VPS Deployment
+
+GitHub Actions deploys `main` to the VPS over SSH. The VPS runs PostgreSQL, the bot, and the worker with Docker Compose.
+
+Required GitHub repository secrets:
+
+```text
+VPS_HOST=<server host>
+VPS_PORT=<ssh port, usually 22>
+VPS_USER=<ssh user>
+VPS_SSH_KEY=<private deploy key>
+```
+
+Required files on the VPS:
+
+```text
+/srv/football-info-bot/.env
+```
+
+The `.env` file should be based on `.env.example` and must contain real secret values.
+
+First-time VPS setup outline:
+
+```bash
+sudo mkdir -p /srv/football-info-bot
+sudo chown "$USER":"$USER" /srv/football-info-bot
+cd /srv/football-info-bot
+git clone https://github.com/Harumimax/FootballInfoBot.git .
+cp .env.example .env
+```
+
+Then edit `.env` on the VPS and set at least:
+
+```text
+TELEGRAM_BOT_TOKEN=<token from BotFather>
+POSTGRES_PASSWORD=<strong password>
+DATABASE_URL=postgresql+asyncpg://football_bot:<same password>@postgres:5432/football_bot
+ADMIN_USER_IDS=<your Telegram user id>
+```
+
+The deploy workflow runs:
+
+```bash
+docker compose build bot worker migrate
+docker compose --profile tools run --rm migrate
+docker compose up -d bot worker
+```

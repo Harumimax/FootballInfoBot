@@ -34,5 +34,16 @@ services:
         condition: service_healthy
     command: ["football-info-worker"]
 
+  migrate:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    profiles:
+      - tools
+
 volumes:
   postgres_data:
