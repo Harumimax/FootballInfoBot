@@ -32,14 +32,34 @@ jobs:
           VPS_PORT: ${{ secrets.VPS_PORT || 22 }}
           VPS_USER: ${{ secrets.VPS_USER }}
           DEPLOY_PATH: /srv/football-info-bot
+          REPO_URL: https://github.com/Harumimax/FootballInfoBot.git
         run: |
-          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' REPO_URL='$REPO_URL' bash -s" <<'REMOTE'
           set -euo pipefail
 
+          mkdir -p "$DEPLOY_PATH"
           cd "$DEPLOY_PATH"
-          git fetch --prune origin
-          git checkout main
-          git pull --ff-only origin main
+
+          if [ ! -d .git ]; then
+            tmp_env=""
+            if [ -f .env ]; then
+              tmp_env="$(mktemp)"
+              cp .env "$tmp_env"
+            fi
+
+            find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 ! -name ".env" -exec rm -rf {} +
+            rm -f .env
+            git clone "$REPO_URL" .
+
+            if [ -n "$tmp_env" ]; then
+              mv "$tmp_env" .env
+              chmod 600 .env
+            fi
+          else
+            git fetch --prune origin
+            git checkout main
+            git pull --ff-only origin main
+          fi
 
           if [ ! -f .env ]; then
             echo "Missing .env in $DEPLOY_PATH" >&2

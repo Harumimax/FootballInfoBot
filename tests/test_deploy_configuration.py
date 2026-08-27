@@ -32,6 +32,10 @@ class DeployConfigurationTest(unittest.TestCase):
             self.assertIn(f"secrets.{secret_name}", workflow)
 
         self.assertIn("DEPLOY_PATH: /srv/football-info-bot", workflow)
+        self.assertIn("REPO_URL: https://github.com/Harumimax/FootballInfoBot.git", workflow)
+        self.assertIn("mkdir -p \"$DEPLOY_PATH\"", workflow)
+        self.assertIn("if [ ! -d .git ]; then", workflow)
+        self.assertIn("git clone \"$REPO_URL\" .", workflow)
         self.assertIn("git pull --ff-only origin main", workflow)
         self.assertIn("docker compose build bot worker migrate", workflow)
         self.assertIn("docker compose --profile tools run --rm migrate", workflow)

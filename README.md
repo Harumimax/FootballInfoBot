@@ -95,11 +95,12 @@ First-time VPS setup outline:
 sudo mkdir -p /srv/football-info-bot
 sudo chown "$USER":"$USER" /srv/football-info-bot
 cd /srv/football-info-bot
-git clone https://github.com/Harumimax/FootballInfoBot.git .
 cp .env.example .env
 ```
 
-Then edit `.env` on the VPS and set at least:
+If the repository is not cloned yet, the deploy workflow will clone it into `/srv/football-info-bot` on the first run and preserve an existing `.env` file.
+
+Before the first deploy, create `/srv/football-info-bot/.env` on the VPS and set at least:
 
 ```text
 TELEGRAM_BOT_TOKEN=<token from BotFather>
