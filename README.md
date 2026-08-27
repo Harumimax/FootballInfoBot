@@ -30,6 +30,12 @@ The parser uses BeautifulSoup with the standard `html.parser` backend by default
 - `football-info-bot`: Telegram bot process.
 - `football-info-worker`: scheduled parser, update, notification, and cleanup jobs.
 
+## Telegram MVP
+
+The current bot skeleton supports `/start`, `/help`, the approved main menu, MVP league buttons, and placeholder responses for subscriptions, standings, and current round requests.
+
+Manual UX can be tested without a live Telegram token or database because message rendering and keyboard builders are pure Python helpers.
+
 ## Database
 
 The production database is PostgreSQL. Schema changes are managed through Alembic migrations.
