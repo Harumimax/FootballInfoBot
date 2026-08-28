@@ -266,6 +266,27 @@ def upgrade() -> None:
                 "source_url": "https://football.kulichki.net/spain/",
                 "is_active": True,
             },
+            {
+                "source": "kulichki",
+                "code": "germany",
+                "name": "Германия",
+                "source_url": "https://football.kulichki.net/germany/",
+                "is_active": True,
+            },
+            {
+                "source": "kulichki",
+                "code": "italy",
+                "name": "Италия",
+                "source_url": "https://football.kulichki.net/italy/",
+                "is_active": True,
+            },
+            {
+                "source": "kulichki",
+                "code": "france",
+                "name": "Франция",
+                "source_url": "https://football.kulichki.net/france/",
+                "is_active": True,
+            },
         ],
     )
 

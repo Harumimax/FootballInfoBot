@@ -101,10 +101,13 @@ class BotManualUxTest(unittest.TestCase):
         keyboard = build_subscription_keyboard(subscribed_league_codes=frozenset({"england"}))
         first_button = keyboard.inline_keyboard[0][0]
         second_button = keyboard.inline_keyboard[1][0]
+        fifth_button = keyboard.inline_keyboard[4][0]
 
         self.assertEqual(first_button.text, "✓ Англия")
         self.assertEqual(first_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}england")
         self.assertEqual(second_button.text, "Испания")
+        self.assertEqual(fifth_button.text, "Франция")
+        self.assertEqual(fifth_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}france")
 
     def test_subscription_type_keyboard_offers_league_or_team_path(self) -> None:
         keyboard = build_subscription_type_keyboard()
@@ -150,8 +153,14 @@ class BotManualUxTest(unittest.TestCase):
 
         self.assertEqual(table_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_TABLE_PREFIX}england")
         self.assertEqual(table_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_TABLE_PREFIX}spain")
+        self.assertEqual(table_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_TABLE_PREFIX}germany")
+        self.assertEqual(table_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_TABLE_PREFIX}italy")
+        self.assertEqual(table_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_TABLE_PREFIX}france")
         self.assertEqual(round_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}england")
         self.assertEqual(round_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}spain")
+        self.assertEqual(round_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}germany")
+        self.assertEqual(round_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}italy")
+        self.assertEqual(round_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}france")
 
     def test_render_round_state_includes_date_time_and_scores(self) -> None:
         round_ = ParsedRound(
@@ -298,6 +307,10 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             callback.message.answers[0].reply_markup.inline_keyboard[0][0].callback_data,
             f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}england",
+        )
+        self.assertEqual(
+            callback.message.answers[0].reply_markup.inline_keyboard[4][0].callback_data,
+            f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}france",
         )
 
         league_callback = FakeCallback(data=f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}spain", user_id=123)

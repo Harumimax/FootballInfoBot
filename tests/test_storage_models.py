@@ -69,6 +69,12 @@ class StorageModelsTest(unittest.TestCase):
         self.assertIn('"name": "Англия"', migration_text)
         self.assertIn('"code": "spain"', migration_text)
         self.assertIn('"name": "Испания"', migration_text)
+        self.assertIn('"code": "germany"', migration_text)
+        self.assertIn('"name": "Германия"', migration_text)
+        self.assertIn('"code": "italy"', migration_text)
+        self.assertIn('"name": "Италия"', migration_text)
+        self.assertIn('"code": "france"', migration_text)
+        self.assertIn('"name": "Франция"', migration_text)
         self.assertNotIn("�", migration_text)
 
     def test_alembic_can_render_offline_upgrade_sql(self) -> None:
@@ -99,6 +105,14 @@ class StorageModelsTest(unittest.TestCase):
 
         self.assertIn("team_subscriptions", migration_text)
         self.assertIn("uq_team_subscriptions_user_league_team", migration_text)
+
+    def test_extra_leagues_migration_adds_new_sources(self) -> None:
+        migration = PROJECT_ROOT / "migrations" / "versions" / "202608280003_seed_extra_mvp_leagues.py"
+        migration_text = migration.read_text(encoding="utf-8")
+
+        self.assertIn("germany", migration_text)
+        self.assertIn("italy", migration_text)
+        self.assertIn("france", migration_text)
 
 
 def _has_unique_constraint(model: type[object], *column_names: str) -> bool:

@@ -21,10 +21,13 @@ class UpdateFactoryTest(unittest.TestCase):
 
         sources = build_mvp_league_sources(settings)
 
-        self.assertEqual([source.code for source in sources], ["england", "spain"])
-        self.assertEqual([source.name for source in sources], ["Англия", "Испания"])
+        self.assertEqual([source.code for source in sources], ["england", "spain", "germany", "italy", "france"])
+        self.assertEqual([source.name for source in sources], ["Англия", "Испания", "Германия", "Италия", "Франция"])
         self.assertEqual(sources[0].url, "https://football.kulichki.net/england/")
         self.assertEqual(sources[1].url, "https://football.kulichki.net/spain/")
+        self.assertEqual(sources[2].url, "https://football.kulichki.net/germany/")
+        self.assertEqual(sources[3].url, "https://football.kulichki.net/italy/")
+        self.assertEqual(sources[4].url, "https://football.kulichki.net/france/")
 
 
 if __name__ == "__main__":

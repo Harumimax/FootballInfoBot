@@ -90,10 +90,19 @@ class AdminUxTest(unittest.TestCase):
 
         self.assertEqual(sync_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_ADMIN_SYNC_PREFIX}england")
         self.assertEqual(sync_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_ADMIN_SYNC_PREFIX}spain")
+        self.assertEqual(sync_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_ADMIN_SYNC_PREFIX}germany")
+        self.assertEqual(sync_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_ADMIN_SYNC_PREFIX}italy")
+        self.assertEqual(sync_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_ADMIN_SYNC_PREFIX}france")
         self.assertEqual(toggle_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_ADMIN_TOGGLE_PREFIX}england")
         self.assertEqual(toggle_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_ADMIN_TOGGLE_PREFIX}spain")
+        self.assertEqual(toggle_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_ADMIN_TOGGLE_PREFIX}germany")
+        self.assertEqual(toggle_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_ADMIN_TOGGLE_PREFIX}italy")
+        self.assertEqual(toggle_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_ADMIN_TOGGLE_PREFIX}france")
         self.assertEqual(teams_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_ADMIN_TEAMS_PREFIX}england")
         self.assertEqual(teams_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_ADMIN_TEAMS_PREFIX}spain")
+        self.assertEqual(teams_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_ADMIN_TEAMS_PREFIX}germany")
+        self.assertEqual(teams_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_ADMIN_TEAMS_PREFIX}italy")
+        self.assertEqual(teams_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_ADMIN_TEAMS_PREFIX}france")
 
     def test_admin_messages_are_compact_and_actionable(self) -> None:
         self.assertEqual(render_admin_menu_message(), "Админка FootballInfoBot.")
@@ -146,6 +155,9 @@ class AdminUxTest(unittest.TestCase):
         self.assertIn("Статус парсера:", message)
         self.assertIn("Англия: последнее успешное обновление нет данных, включена", message)
         self.assertIn("Испания: последнее успешное обновление нет данных, включена", message)
+        self.assertIn("Германия: последнее успешное обновление нет данных, включена", message)
+        self.assertIn("Италия: последнее успешное обновление нет данных, включена", message)
+        self.assertIn("Франция: последнее успешное обновление нет данных, включена", message)
         self.assertIn("Последний запуск: нет данных", message)
 
     def test_parser_status_renders_known_values(self) -> None:
@@ -181,6 +193,7 @@ class AdminUxTest(unittest.TestCase):
 
     def test_league_name_by_code_falls_back_to_code(self) -> None:
         self.assertEqual(league_name_by_code("england"), "Англия")
+        self.assertEqual(league_name_by_code("germany"), "Германия")
         self.assertEqual(league_name_by_code("unknown"), "unknown")
 
     def test_dispatcher_registers_admin_and_start_routers(self) -> None:

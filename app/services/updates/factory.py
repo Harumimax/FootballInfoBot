@@ -11,10 +11,13 @@ from app.storage.repositories import FootballDataSqlAlchemyRepository
 from app.storage.session import Database
 
 
-MVP_LEAGUE_CODES = ("england", "spain")
+MVP_LEAGUE_CODES = ("england", "spain", "germany", "italy", "france")
 MVP_LEAGUE_NAMES = {
     "england": "Англия",
     "spain": "Испания",
+    "germany": "Германия",
+    "italy": "Италия",
+    "france": "Франция",
 }
 
 
