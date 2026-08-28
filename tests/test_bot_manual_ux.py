@@ -134,7 +134,18 @@ class BotManualUxTest(unittest.TestCase):
         table = StandingTableView(
             league=LeagueView(code="spain", name="Испания"),
             rows=(
-                ParsedStandingRow(position=1, team_name="Реал Мадрид", played=2, points=6),
+                ParsedStandingRow(
+                    position=1,
+                    team_name="Реал Мадрид",
+                    played=2,
+                    wins=2,
+                    draws=0,
+                    losses=0,
+                    goals_for=6,
+                    goals_against=2,
+                    goal_difference=4,
+                    points=6,
+                ),
                 ParsedStandingRow(position=2, team_name="Барселона", played=2, points=4),
             ),
         )
@@ -142,8 +153,8 @@ class BotManualUxTest(unittest.TestCase):
         self.assertEqual(
             render_standings(table),
             "Испания. Турнирная таблица\n\n"
-            "1. Реал Мадрид - 6 очк. (2 игр)\n"
-            "2. Барселона - 4 очк. (2 игр)",
+            "1. Реал Мадрид - 2 игр, 6 очк., В2 Н0 П0, мячи 6-2\n"
+            "2. Барселона - 2 игр, 4 очк.",
         )
 
     def test_subscription_messages_are_compact(self) -> None:

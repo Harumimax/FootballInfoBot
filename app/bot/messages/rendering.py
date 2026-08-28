@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.parser.dto import ParsedMatch, ParsedRound
+from app.parser.dto import ParsedMatch, ParsedRound, ParsedStandingRow
 from app.services.subscriptions.dto import StandingTableView
 from app.services.subscriptions.dto import LeagueView
 
@@ -104,11 +104,23 @@ def render_standings(table: StandingTableView | None) -> str:
         return NO_DATA_MESSAGE
 
     lines = [f"{table.league.name}. Турнирная таблица", ""]
-    lines.extend(
-        f"{row.position}. {row.team_name} - {row.points if row.points is not None else '-'} очк. ({row.played if row.played is not None else '-'} игр)"
-        for row in table.rows
-    )
+    lines.extend(_format_standing_row(row) for row in table.rows)
     return "\n".join(lines)
+
+
+def _format_standing_row(row: ParsedStandingRow) -> str:
+    details = [
+        f"{row.played if row.played is not None else '-'} игр",
+        f"{row.points if row.points is not None else '-'} очк.",
+    ]
+
+    if row.wins is not None and row.draws is not None and row.losses is not None:
+        details.append(f"В{row.wins} Н{row.draws} П{row.losses}")
+
+    if row.goals_for is not None and row.goals_against is not None:
+        details.append(f"мячи {row.goals_for}-{row.goals_against}")
+
+    return f"{row.position}. {row.team_name} - {', '.join(details)}"
 
 
 def _format_match(match: ParsedMatch) -> str:
