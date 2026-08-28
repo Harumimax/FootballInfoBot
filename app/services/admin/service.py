@@ -3,7 +3,15 @@ from __future__ import annotations
 from typing import Protocol
 
 from app.config import Settings
-from app.services.admin.dto import AdminSyncResult, LeagueToggleResult, ParserStatusView
+from app.services.admin.dto import (
+    AdminSubscriptionStatsView,
+    AdminSyncResult,
+    AdminTeamListView,
+    LeagueToggleResult,
+    ParserStatusView,
+    RecentNotificationView,
+)
+from app.services.subscriptions.dto import LeagueView
 from app.services.updates.factory import build_mvp_league_sources, create_league_sync_service
 from app.storage.repositories import FootballDataSqlAlchemyRepository
 from app.storage.session import Database
@@ -17,6 +25,15 @@ class AdminDataRepository(Protocol):
         pass
 
     async def toggle_league_active(self, league_code: str) -> LeagueToggleResult:
+        pass
+
+    async def get_subscription_stats(self) -> AdminSubscriptionStatsView:
+        pass
+
+    async def get_recent_notifications(self, limit: int = 10) -> tuple[RecentNotificationView, ...]:
+        pass
+
+    async def get_league_teams(self, league_code: str) -> AdminTeamListView | None:
         pass
 
 
@@ -51,6 +68,22 @@ class FootballAdminService:
     async def toggle_league_active(self, league_code: str) -> LeagueToggleResult:
         async with self._database.session() as session:
             return await FootballDataSqlAlchemyRepository(session).toggle_league_active(league_code)
+
+    async def get_subscription_stats(self) -> AdminSubscriptionStatsView:
+        async with self._database.session() as session:
+            return await FootballDataSqlAlchemyRepository(session).get_subscription_stats()
+
+    async def get_recent_notifications(self, limit: int = 10) -> tuple[RecentNotificationView, ...]:
+        async with self._database.session() as session:
+            return await FootballDataSqlAlchemyRepository(session).get_recent_notifications(limit=limit)
+
+    async def get_league_teams(self, league_code: str) -> AdminTeamListView | None:
+        league_name = _league_name_by_code(league_code, self._settings)
+        async with self._database.session() as session:
+            teams = await FootballDataSqlAlchemyRepository(session).list_league_teams(league_code)
+        if not teams:
+            return None
+        return AdminTeamListView(league=LeagueView(code=league_code, name=league_name), teams=teams)
 
 
 def _league_name_by_code(league_code: str, settings: Settings) -> str:

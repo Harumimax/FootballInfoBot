@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedMatch, ParsedRound, ParsedStandingRow
-from app.services.admin.dto import LeagueParserStatusView, LeagueToggleResult, ParserStatusView
+from app.services.admin.dto import (
+    AdminSubscriptionStatsView,
+    LeagueParserStatusView,
+    LeagueToggleResult,
+    ParserStatusView,
+    RecentNotificationView,
+)
 from app.services.subscriptions.dto import (
     CurrentRoundView,
     LeagueView,
@@ -148,6 +154,47 @@ class FootballDataSqlAlchemyRepository:
         league.is_active = not league.is_active
         await self._session.flush()
         return LeagueToggleResult(league_name=league.name, is_active=league.is_active)
+
+    async def get_subscription_stats(self) -> AdminSubscriptionStatsView:
+        users_count = await self._session.scalar(select(func.count(User.id)))
+        league_subscriptions = await self._session.scalar(
+            select(func.count(Subscription.id)).where(Subscription.is_active.is_(True))
+        )
+        team_subscriptions = await self._session.scalar(
+            select(func.count(TeamSubscription.id)).where(TeamSubscription.is_active.is_(True))
+        )
+        return AdminSubscriptionStatsView(
+            users_count=users_count or 0,
+            active_league_subscriptions=league_subscriptions or 0,
+            active_team_subscriptions=team_subscriptions or 0,
+        )
+
+    async def get_recent_notifications(self, limit: int = 10) -> tuple[RecentNotificationView, ...]:
+        statement = (
+            select(
+                NotificationLog.created_at,
+                User.telegram_user_id,
+                NotificationLog.message_type,
+                NotificationLog.status,
+                NotificationLog.dedupe_key,
+                NotificationLog.error_message,
+            )
+            .join(User, User.id == NotificationLog.user_id)
+            .order_by(desc(NotificationLog.created_at), desc(NotificationLog.id))
+            .limit(limit)
+        )
+        result = await self._session.execute(statement)
+        return tuple(
+            RecentNotificationView(
+                created_at=row.created_at,
+                telegram_user_id=row.telegram_user_id,
+                message_type=row.message_type,
+                status=row.status,
+                dedupe_key=row.dedupe_key,
+                error_message=row.error_message,
+            )
+            for row in result
+        )
 
     async def list_active_league_codes(self) -> frozenset[str]:
         result = await self._session.scalars(

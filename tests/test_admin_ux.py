@@ -7,20 +7,30 @@ from types import SimpleNamespace
 from app.bot.dispatcher import create_dispatcher
 from app.bot.handlers.admin import (
     handle_admin_last_error,
+    handle_admin_notifications,
     handle_admin_status,
+    handle_admin_subscribers,
     handle_admin_sync_league,
+    handle_admin_teams_league,
+    handle_admin_test_push,
     handle_admin_toggle_league,
 )
 from app.bot.keyboards import (
     CALLBACK_ADMIN_LAST_ERROR,
+    CALLBACK_ADMIN_NOTIFICATIONS,
     CALLBACK_ADMIN_STATUS,
+    CALLBACK_ADMIN_SUBSCRIBERS,
     CALLBACK_ADMIN_SYNC_MENU,
     CALLBACK_ADMIN_SYNC_PREFIX,
+    CALLBACK_ADMIN_TEAMS_MENU,
+    CALLBACK_ADMIN_TEAMS_PREFIX,
+    CALLBACK_ADMIN_TEST_PUSH,
     CALLBACK_ADMIN_TOGGLE_MENU,
     CALLBACK_ADMIN_TOGGLE_PREFIX,
     MENU_ADMIN,
     build_admin_keyboard,
     build_admin_sync_league_keyboard,
+    build_admin_teams_league_keyboard,
     build_admin_toggle_league_keyboard,
     build_main_menu_keyboard,
 )
@@ -29,14 +39,19 @@ from app.bot.messages import (
     ParserStatusView,
     league_name_by_code,
     render_admin_menu_message,
+    render_admin_subscription_stats,
     render_admin_sync_result,
     render_admin_sync_select_message,
+    render_admin_team_list,
+    render_admin_test_push_message,
     render_admin_toggle_result,
     render_admin_toggle_select_message,
     render_last_parser_error,
     render_parser_status,
+    render_recent_notifications,
 )
-from app.services.admin.dto import AdminSyncResult, LeagueToggleResult
+from app.services.admin.dto import AdminSubscriptionStatsView, AdminSyncResult, AdminTeamListView, LeagueToggleResult, RecentNotificationView
+from app.services.subscriptions.dto import LeagueView, TeamView
 
 
 class AdminUxTest(unittest.TestCase):
@@ -61,17 +76,24 @@ class AdminUxTest(unittest.TestCase):
                 CALLBACK_ADMIN_STATUS,
                 CALLBACK_ADMIN_LAST_ERROR,
                 CALLBACK_ADMIN_TOGGLE_MENU,
+                CALLBACK_ADMIN_SUBSCRIBERS,
+                CALLBACK_ADMIN_NOTIFICATIONS,
+                CALLBACK_ADMIN_TEAMS_MENU,
+                CALLBACK_ADMIN_TEST_PUSH,
             ],
         )
 
     def test_admin_league_keyboards_use_mvp_leagues(self) -> None:
         sync_keyboard = build_admin_sync_league_keyboard()
         toggle_keyboard = build_admin_toggle_league_keyboard()
+        teams_keyboard = build_admin_teams_league_keyboard()
 
         self.assertEqual(sync_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_ADMIN_SYNC_PREFIX}england")
         self.assertEqual(sync_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_ADMIN_SYNC_PREFIX}spain")
         self.assertEqual(toggle_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_ADMIN_TOGGLE_PREFIX}england")
         self.assertEqual(toggle_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_ADMIN_TOGGLE_PREFIX}spain")
+        self.assertEqual(teams_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_ADMIN_TEAMS_PREFIX}england")
+        self.assertEqual(teams_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_ADMIN_TEAMS_PREFIX}spain")
 
     def test_admin_messages_are_compact_and_actionable(self) -> None:
         self.assertEqual(render_admin_menu_message(), "Админка FootballInfoBot.")
@@ -87,6 +109,36 @@ class AdminUxTest(unittest.TestCase):
             render_admin_toggle_result(LeagueToggleResult(league_name="Испания", is_active=False)),
             "Испания: лига отключена.",
         )
+        self.assertIn(
+            "Подписок на команды: 3",
+            render_admin_subscription_stats(
+                AdminSubscriptionStatsView(
+                    users_count=2,
+                    active_league_subscriptions=4,
+                    active_team_subscriptions=3,
+                )
+            ),
+        )
+        self.assertEqual(render_admin_test_push_message(), "Тестовый пуш FootballInfoBot. Если вы видите это сообщение, отправка в Telegram работает.")
+
+    def test_recent_notifications_and_team_list_messages_are_compact(self) -> None:
+        notifications = (
+            RecentNotificationView(
+                created_at=datetime(2026, 8, 28, 9, 0),
+                telegram_user_id=123,
+                message_type="digest",
+                status="sent",
+                dedupe_key="morning:2026-08-28:spain:123",
+            ),
+        )
+        team_list = AdminTeamListView(
+            league=LeagueView(code="spain", name="Испания"),
+            teams=(TeamView(id=2, name="Барселона"), TeamView(id=1, name="Реал Мадрид")),
+        )
+
+        self.assertIn("28.08 09:00 | 123 | digest | sent", render_recent_notifications(notifications))
+        self.assertEqual(render_recent_notifications(()), "Уведомлений пока нет.")
+        self.assertEqual(render_admin_team_list(team_list), "Испания. Команды:\n\nБарселона\nРеал Мадрид")
 
     def test_parser_status_defaults_to_mvp_leagues(self) -> None:
         message = render_parser_status()
@@ -178,6 +230,51 @@ class AdminLiveActionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.toggled_codes, ["england"])
         self.assertEqual(callback.message.answers[0].text, "Англия: лига отключена.")
 
+    async def test_subscribers_reads_admin_service(self) -> None:
+        stats = AdminSubscriptionStatsView(users_count=2, active_league_subscriptions=3, active_team_subscriptions=1)
+        service = FakeAdminService(subscription_stats=stats)
+        callback = FakeCallback(data=CALLBACK_ADMIN_SUBSCRIBERS, user_id=123)
+
+        await handle_admin_subscribers(callback, admin_user_ids=frozenset({123}), football_admin_service=service)
+
+        self.assertEqual(callback.message.answers[0].text, render_admin_subscription_stats(stats))
+
+    async def test_notifications_reads_admin_service(self) -> None:
+        notification = RecentNotificationView(
+            created_at=datetime(2026, 8, 28, 9, 0),
+            telegram_user_id=123,
+            message_type="digest",
+            status="sent",
+            dedupe_key="morning:2026-08-28:spain:123",
+        )
+        service = FakeAdminService(recent_notifications=(notification,))
+        callback = FakeCallback(data=CALLBACK_ADMIN_NOTIFICATIONS, user_id=123)
+
+        await handle_admin_notifications(callback, admin_user_ids=frozenset({123}), football_admin_service=service)
+
+        self.assertEqual(service.requested_notification_limits, [10])
+        self.assertEqual(callback.message.answers[0].text, render_recent_notifications((notification,)))
+
+    async def test_teams_league_reads_admin_service(self) -> None:
+        team_list = AdminTeamListView(
+            league=LeagueView(code="spain", name="Испания"),
+            teams=(TeamView(id=1, name="Барселона"),),
+        )
+        service = FakeAdminService(team_list=team_list)
+        callback = FakeCallback(data=f"{CALLBACK_ADMIN_TEAMS_PREFIX}spain", user_id=123)
+
+        await handle_admin_teams_league(callback, admin_user_ids=frozenset({123}), football_admin_service=service)
+
+        self.assertEqual(service.requested_team_codes, ["spain"])
+        self.assertEqual(callback.message.answers[0].text, render_admin_team_list(team_list))
+
+    async def test_test_push_sends_message_to_admin_chat(self) -> None:
+        callback = FakeCallback(data=CALLBACK_ADMIN_TEST_PUSH, user_id=123)
+
+        await handle_admin_test_push(callback, admin_user_ids=frozenset({123}))
+
+        self.assertEqual(callback.message.answers[0].text, render_admin_test_push_message())
+
     async def test_regular_user_cannot_run_admin_callback(self) -> None:
         service = FakeAdminService(status=_status())
         callback = FakeCallback(data=CALLBACK_ADMIN_STATUS, user_id=456)
@@ -222,13 +319,21 @@ class FakeAdminService:
         last_error: str | None = None,
         sync_result: AdminSyncResult | None = None,
         toggle_result: LeagueToggleResult | None = None,
+        subscription_stats: AdminSubscriptionStatsView | None = None,
+        recent_notifications: tuple[RecentNotificationView, ...] = (),
+        team_list: AdminTeamListView | None = None,
     ) -> None:
         self.status = status
         self.last_error = last_error
         self.sync_result = sync_result
         self.toggle_result = toggle_result
+        self.subscription_stats = subscription_stats
+        self.recent_notifications = recent_notifications
+        self.team_list = team_list
         self.synced_codes: list[str] = []
         self.toggled_codes: list[str] = []
+        self.requested_notification_limits: list[int] = []
+        self.requested_team_codes: list[str] = []
 
     async def get_parser_status(self) -> ParserStatusView:
         assert self.status is not None
@@ -246,6 +351,18 @@ class FakeAdminService:
         self.toggled_codes.append(league_code)
         assert self.toggle_result is not None
         return self.toggle_result
+
+    async def get_subscription_stats(self) -> AdminSubscriptionStatsView:
+        assert self.subscription_stats is not None
+        return self.subscription_stats
+
+    async def get_recent_notifications(self, limit: int = 10) -> tuple[RecentNotificationView, ...]:
+        self.requested_notification_limits.append(limit)
+        return self.recent_notifications
+
+    async def get_league_teams(self, league_code: str) -> AdminTeamListView | None:
+        self.requested_team_codes.append(league_code)
+        return self.team_list
 
 
 def _status() -> ParserStatusView:

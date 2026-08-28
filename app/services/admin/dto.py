@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from app.services.subscriptions.dto import LeagueView, TeamView
+
 
 @dataclass(frozen=True)
 class LeagueParserStatusView:
@@ -32,3 +34,26 @@ class AdminSyncResult:
 class LeagueToggleResult:
     league_name: str
     is_active: bool
+
+
+@dataclass(frozen=True)
+class AdminSubscriptionStatsView:
+    users_count: int
+    active_league_subscriptions: int
+    active_team_subscriptions: int
+
+
+@dataclass(frozen=True)
+class RecentNotificationView:
+    created_at: datetime
+    telegram_user_id: int
+    message_type: str
+    status: str
+    dedupe_key: str | None
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class AdminTeamListView:
+    league: LeagueView
+    teams: tuple[TeamView, ...]
