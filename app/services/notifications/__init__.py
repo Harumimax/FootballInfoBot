@@ -11,6 +11,7 @@ from app.services.notifications.push import (
     PushNotificationService,
     PushRunResult,
     SubscriberView,
+    TeamSubscriberView,
     after_matchday_target_date,
     should_run_after_matchday_check,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "PushNotificationService",
     "PushRunResult",
     "SubscriberView",
+    "TeamSubscriberView",
     "TelegramPushSender",
     "after_matchday_target_date",
     "should_run_after_matchday_check",

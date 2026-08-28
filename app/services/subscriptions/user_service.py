@@ -11,6 +11,9 @@ from app.services.subscriptions.dto import (
     StandingTableView,
     SubscriptionToggleResult,
     TelegramUserProfile,
+    TeamSubscriptionToggleResult,
+    TeamSubscriptionView,
+    TeamView,
 )
 from app.storage.repositories import FootballDataSqlAlchemyRepository
 from app.storage.session import Database
@@ -26,12 +29,30 @@ class UserDataRepository(Protocol):
     async def list_user_subscription_codes(self, telegram_user_id: int) -> frozenset[str]:
         pass
 
+    async def list_user_team_subscriptions(self, telegram_user_id: int) -> tuple[TeamSubscriptionView, ...]:
+        pass
+
+    async def list_user_team_subscription_ids(self, telegram_user_id: int, league_code: str) -> frozenset[int]:
+        pass
+
+    async def list_league_teams(self, league_code: str) -> tuple[TeamView, ...]:
+        pass
+
     async def toggle_league_subscription(
         self,
         *,
         telegram_user_id: int,
         league_code: str,
     ) -> tuple[LeagueView, bool]:
+        pass
+
+    async def toggle_team_subscription(
+        self,
+        *,
+        telegram_user_id: int,
+        league_code: str,
+        team_id: int,
+    ) -> tuple[LeagueView, TeamView, bool]:
         pass
 
     async def get_current_round(self, league_code: str) -> CurrentRoundView | None:
@@ -53,6 +74,15 @@ class FootballUserService:
 
     async def get_subscriptions(self, telegram_user_id: int) -> tuple[LeagueView, ...]:
         return await self._repository.list_user_subscriptions(telegram_user_id)
+
+    async def get_team_subscriptions(self, telegram_user_id: int) -> tuple[TeamSubscriptionView, ...]:
+        return await self._repository.list_user_team_subscriptions(telegram_user_id)
+
+    async def get_team_subscription_ids(self, telegram_user_id: int, league_code: str) -> frozenset[int]:
+        return await self._repository.list_user_team_subscription_ids(telegram_user_id, league_code)
+
+    async def get_league_teams(self, league_code: str) -> tuple[TeamView, ...]:
+        return await self._repository.list_league_teams(league_code)
 
     async def toggle_subscription(
         self,
@@ -77,6 +107,20 @@ class FootballUserService:
             current_round=current_round,
             current_rounds=current_rounds,
         )
+
+    async def toggle_team_subscription(
+        self,
+        *,
+        telegram_user_id: int,
+        league_code: str,
+        team_id: int,
+    ) -> TeamSubscriptionToggleResult:
+        league, team, is_active = await self._repository.toggle_team_subscription(
+            telegram_user_id=telegram_user_id,
+            league_code=league_code,
+            team_id=team_id,
+        )
+        return TeamSubscriptionToggleResult(league=league, team=team, is_active=is_active)
 
     async def get_current_round(self, league_code: str) -> CurrentRoundView | None:
         return await self._repository.get_current_round(league_code)
@@ -107,6 +151,18 @@ class DatabaseFootballUserService:
         async with self._service() as service:
             return await service.get_subscriptions(telegram_user_id)
 
+    async def get_team_subscriptions(self, telegram_user_id: int) -> tuple[TeamSubscriptionView, ...]:
+        async with self._service() as service:
+            return await service.get_team_subscriptions(telegram_user_id)
+
+    async def get_team_subscription_ids(self, telegram_user_id: int, league_code: str) -> frozenset[int]:
+        async with self._service() as service:
+            return await service.get_team_subscription_ids(telegram_user_id, league_code)
+
+    async def get_league_teams(self, league_code: str) -> tuple[TeamView, ...]:
+        async with self._service() as service:
+            return await service.get_league_teams(league_code)
+
     async def toggle_subscription(
         self,
         *,
@@ -116,6 +172,20 @@ class DatabaseFootballUserService:
         async with self._service() as service:
             return await service.toggle_subscription(telegram_user_id=telegram_user_id, league_code=league_code)
 
+    async def toggle_team_subscription(
+        self,
+        *,
+        telegram_user_id: int,
+        league_code: str,
+        team_id: int,
+    ) -> TeamSubscriptionToggleResult:
+        async with self._service() as service:
+            return await service.toggle_team_subscription(
+                telegram_user_id=telegram_user_id,
+                league_code=league_code,
+                team_id=team_id,
+            )
+
     async def get_current_round(self, league_code: str) -> CurrentRoundView | None:
         async with self._service() as service:
             return await service.get_current_round(league_code)
@@ -123,6 +193,7 @@ class DatabaseFootballUserService:
     async def get_latest_standings(self, league_code: str) -> StandingTableView | None:
         async with self._service() as service:
             return await service.get_latest_standings(league_code)
+
 
 @asynccontextmanager
 async def _service_context(database: Database) -> AsyncIterator[FootballUserService]:

@@ -20,11 +20,30 @@ class LeagueView:
 
 
 @dataclass(frozen=True)
+class TeamView:
+    id: int
+    name: str
+
+
+@dataclass(frozen=True)
+class TeamSubscriptionView:
+    league: LeagueView
+    team: TeamView
+
+
+@dataclass(frozen=True)
 class SubscriptionToggleResult:
     league: LeagueView
     is_active: bool
     current_round: ParsedRound | None
     current_rounds: tuple[ParsedRound, ...] = ()
+
+
+@dataclass(frozen=True)
+class TeamSubscriptionToggleResult:
+    league: LeagueView
+    team: TeamView
+    is_active: bool
 
 
 @dataclass(frozen=True)

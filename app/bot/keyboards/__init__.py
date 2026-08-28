@@ -2,7 +2,11 @@
 
 from app.bot.keyboards.main import (
     CALLBACK_CURRENT_ROUND_PREFIX,
+    CALLBACK_SUBSCRIPTION_LEAGUE_MENU,
+    CALLBACK_SUBSCRIPTION_TEAM_LEAGUE_MENU,
     CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX,
+    CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX,
+    CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX,
     CALLBACK_TABLE_PREFIX,
     MENU_ADMIN,
     MENU_CURRENT_ROUND,
@@ -13,7 +17,10 @@ from app.bot.keyboards.main import (
     build_current_round_league_keyboard,
     build_main_menu_keyboard,
     build_subscription_keyboard,
+    build_subscription_type_keyboard,
     build_table_league_keyboard,
+    build_team_subscription_keyboard,
+    build_team_subscription_league_keyboard,
 )
 from app.bot.keyboards.admin import (
     CALLBACK_ADMIN_LAST_ERROR,
@@ -35,7 +42,11 @@ __all__ = [
     "CALLBACK_ADMIN_TOGGLE_MENU",
     "CALLBACK_ADMIN_TOGGLE_PREFIX",
     "CALLBACK_CURRENT_ROUND_PREFIX",
+    "CALLBACK_SUBSCRIPTION_LEAGUE_MENU",
+    "CALLBACK_SUBSCRIPTION_TEAM_LEAGUE_MENU",
     "CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX",
+    "CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX",
+    "CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX",
     "CALLBACK_TABLE_PREFIX",
     "MENU_ADMIN",
     "MENU_CURRENT_ROUND",
@@ -49,5 +60,8 @@ __all__ = [
     "build_current_round_league_keyboard",
     "build_main_menu_keyboard",
     "build_subscription_keyboard",
+    "build_subscription_type_keyboard",
     "build_table_league_keyboard",
+    "build_team_subscription_keyboard",
+    "build_team_subscription_league_keyboard",
 ]

@@ -13,6 +13,7 @@ from app.services.notifications import (
     PushNotification,
     PushNotificationService,
     SubscriberView,
+    TeamSubscriberView,
     after_matchday_target_date,
     should_run_after_matchday_check,
 )
@@ -23,10 +24,12 @@ class FakePushRepository:
         self,
         states: tuple[LeagueRoundState, ...],
         subscribers_by_league: dict[str, tuple[SubscriberView, ...]],
+        team_subscribers_by_league: dict[str, tuple[TeamSubscriberView, ...]] | None = None,
         already_sent_keys: set[str] | None = None,
     ) -> None:
         self.states = states
         self.subscribers_by_league = subscribers_by_league
+        self.team_subscribers_by_league = team_subscribers_by_league or {}
         self.sent_keys = already_sent_keys or set()
         self.recorded_notifications: list[PushNotification] = []
 
@@ -35,6 +38,9 @@ class FakePushRepository:
 
     async def get_active_subscribers_for_league(self, league_code: str) -> tuple[SubscriberView, ...]:
         return self.subscribers_by_league.get(league_code, ())
+
+    async def get_active_team_subscribers_for_league(self, league_code: str) -> tuple[TeamSubscriberView, ...]:
+        return self.team_subscribers_by_league.get(league_code, ())
 
     async def was_notification_sent(self, dedupe_key: str) -> bool:
         return dedupe_key in self.sent_keys
@@ -107,6 +113,60 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Матчи сегодня:", sender.sent_notifications[0].text)
         self.assertIn("3-й тур", sender.sent_notifications[0].text)
         self.assertIn("1-й тур", sender.sent_notifications[0].text)
+
+    async def test_morning_push_sends_team_subscription_only_for_team_matches_today(self) -> None:
+        rounds = (_sample_round(), _catch_up_round())
+        repository = FakePushRepository(
+            states=(
+                LeagueRoundState(
+                    league=LeagueView(code="spain", name="Испания"),
+                    round=rounds[0],
+                    rounds=rounds,
+                    has_match_today=True,
+                    all_today_matches_finished=False,
+                    has_changes_today=False,
+                ),
+            ),
+            subscribers_by_league={},
+            team_subscribers_by_league={
+                "spain": (TeamSubscriberView(user_id=2, telegram_user_id=2002, team_id=7, team_name="Барселона"),)
+            },
+        )
+        sender = FakePushSender()
+        service = PushNotificationService(repository=repository, sender=sender)
+
+        result = await service.send_morning_pushes(datetime(2026, 8, 27, 9, 0))
+
+        self.assertEqual(result.sent_count, 1)
+        self.assertEqual(sender.sent_notifications[0].dedupe_key, "morning:2026-08-27:spain:team:7:2002")
+        self.assertIn("Испания. Барселона", sender.sent_notifications[0].text)
+        self.assertIn("27.08 22:00 Барселона - Атлетик", sender.sent_notifications[0].text)
+        self.assertNotIn("Атлетико", sender.sent_notifications[0].text)
+
+    async def test_morning_push_skips_team_subscription_without_team_match_today(self) -> None:
+        repository = FakePushRepository(
+            states=(
+                LeagueRoundState(
+                    league=LeagueView(code="spain", name="Испания"),
+                    round=_sample_round(),
+                    rounds=(_sample_round(),),
+                    has_match_today=True,
+                    all_today_matches_finished=False,
+                    has_changes_today=False,
+                ),
+            ),
+            subscribers_by_league={},
+            team_subscribers_by_league={
+                "spain": (TeamSubscriberView(user_id=2, telegram_user_id=2002, team_id=8, team_name="Бетис"),)
+            },
+        )
+        sender = FakePushSender()
+        service = PushNotificationService(repository=repository, sender=sender)
+
+        result = await service.send_morning_pushes(datetime(2026, 8, 21, 9, 0))
+
+        self.assertEqual(result.sent_count, 0)
+        self.assertEqual(sender.sent_notifications, [])
 
     async def test_morning_push_skips_league_without_matches_today(self) -> None:
         repository = FakePushRepository(

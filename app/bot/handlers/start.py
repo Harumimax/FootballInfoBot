@@ -7,7 +7,11 @@ from aiogram.types import CallbackQuery, Message
 from app.bot.handlers.user_profile import telegram_profile_from_message
 from app.bot.keyboards import (
     CALLBACK_CURRENT_ROUND_PREFIX,
+    CALLBACK_SUBSCRIPTION_LEAGUE_MENU,
+    CALLBACK_SUBSCRIPTION_TEAM_LEAGUE_MENU,
     CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX,
+    CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX,
+    CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX,
     CALLBACK_TABLE_PREFIX,
     MENU_CURRENT_ROUND,
     MENU_HELP,
@@ -17,7 +21,10 @@ from app.bot.keyboards import (
     build_current_round_league_keyboard,
     build_main_menu_keyboard,
     build_subscription_keyboard,
+    build_subscription_type_keyboard,
     build_table_league_keyboard,
+    build_team_subscription_keyboard,
+    build_team_subscription_league_keyboard,
 )
 from app.bot.messages import (
     MVP_LEAGUES,
@@ -29,10 +36,14 @@ from app.bot.messages import (
     render_rounds_state,
     render_select_league_for_round_message,
     render_select_league_for_table_message,
+    render_select_league_subscription_message,
     render_select_subscription_message,
+    render_select_team_league_message,
+    render_select_team_message,
     render_start_message,
     render_standings,
     render_subscriptions_message,
+    render_team_subscription_changed_message,
     render_unsubscribed_message,
 )
 from app.services.subscriptions.user_service import FootballUserService
@@ -59,27 +70,109 @@ async def handle_private_help(message: Message) -> None:
 async def handle_my_subscriptions(message: Message, football_user_service: FootballUserService | None = None) -> None:
     telegram_user_id = _telegram_user_id(message)
     if football_user_service is None or telegram_user_id is None:
-        await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_keyboard())
+        await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_type_keyboard())
         return
 
     subscriptions = await football_user_service.get_subscriptions(telegram_user_id)
-    if subscriptions:
-        await message.answer(render_subscriptions_message(subscriptions))
+    team_subscriptions = await football_user_service.get_team_subscriptions(telegram_user_id)
+    if subscriptions or team_subscriptions:
+        await message.answer(render_subscriptions_message(subscriptions, team_subscriptions))
         return
 
-    await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_keyboard())
+    await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_type_keyboard())
 
 
 async def handle_subscribe_menu(message: Message, football_user_service: FootballUserService | None = None) -> None:
-    telegram_user_id = _telegram_user_id(message)
+    await message.answer(render_select_subscription_message(), reply_markup=build_subscription_type_keyboard())
+
+
+async def handle_subscription_league_menu(
+    callback: CallbackQuery,
+    football_user_service: FootballUserService | None = None,
+) -> None:
+    telegram_user_id = _callback_user_id(callback)
     subscribed_codes = frozenset()
     if football_user_service is not None and telegram_user_id is not None:
         subscribed_codes = await football_user_service.get_subscription_codes(telegram_user_id)
 
-    await message.answer(
-        render_select_subscription_message(),
-        reply_markup=build_subscription_keyboard(subscribed_league_codes=subscribed_codes),
-    )
+    await callback.answer()
+    if callback.message is not None:
+        await callback.message.answer(
+            render_select_league_subscription_message(),
+            reply_markup=build_subscription_keyboard(subscribed_league_codes=subscribed_codes),
+        )
+
+
+async def handle_team_subscription_league_menu(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if callback.message is not None:
+        await callback.message.answer(
+            render_select_team_league_message(),
+            reply_markup=build_team_subscription_league_keyboard(),
+        )
+
+
+async def handle_team_subscription_league_selected(
+    callback: CallbackQuery,
+    football_user_service: FootballUserService | None = None,
+) -> None:
+    await callback.answer()
+    league_code = _strip_callback_prefix(callback.data, CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX)
+    telegram_user_id = _callback_user_id(callback)
+    if football_user_service is None or telegram_user_id is None or not league_code:
+        if callback.message is not None:
+            await callback.message.answer(NO_DATA_MESSAGE)
+        return
+
+    teams = await football_user_service.get_league_teams(league_code)
+    if not teams:
+        if callback.message is not None:
+            await callback.message.answer(NO_DATA_MESSAGE)
+        return
+
+    subscribed_team_ids = await football_user_service.get_team_subscription_ids(telegram_user_id, league_code)
+    if callback.message is not None:
+        await callback.message.answer(
+            render_select_team_message(_league_name_by_code(league_code)),
+            reply_markup=build_team_subscription_keyboard(
+                teams=teams,
+                league_code=league_code,
+                subscribed_team_ids=subscribed_team_ids,
+            ),
+        )
+
+
+async def handle_team_subscription_toggle(
+    callback: CallbackQuery,
+    football_user_service: FootballUserService | None = None,
+) -> None:
+    await callback.answer()
+    league_code, team_id = _parse_team_subscription_callback(callback.data)
+    telegram_user_id = _callback_user_id(callback)
+    if football_user_service is None or telegram_user_id is None or not league_code or team_id is None:
+        if callback.message is not None:
+            await callback.message.answer(NO_DATA_MESSAGE)
+        return
+
+    try:
+        result = await football_user_service.toggle_team_subscription(
+            telegram_user_id=telegram_user_id,
+            league_code=league_code,
+            team_id=team_id,
+        )
+    except ValueError:
+        if callback.message is not None:
+            await callback.message.answer(NO_DATA_MESSAGE)
+        return
+
+    if callback.message is not None:
+        await callback.message.answer(
+            render_team_subscription_changed_message(
+                result.team.name,
+                result.league.name,
+                is_active=result.is_active,
+            )
+        )
 
 
 async def handle_standings_menu(message: Message) -> None:
@@ -173,7 +266,11 @@ def create_start_router() -> Router:
     router.message(F.text == MENU_SUBSCRIBE, F.chat.type == "private")(handle_subscribe_menu)
     router.message(F.text == MENU_STANDINGS, F.chat.type == "private")(handle_standings_menu)
     router.message(F.text == MENU_CURRENT_ROUND, F.chat.type == "private")(handle_current_round_menu)
+    router.callback_query(F.data == CALLBACK_SUBSCRIPTION_LEAGUE_MENU)(handle_subscription_league_menu)
+    router.callback_query(F.data == CALLBACK_SUBSCRIPTION_TEAM_LEAGUE_MENU)(handle_team_subscription_league_menu)
     router.callback_query(F.data.startswith(CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX))(handle_subscription_toggle)
+    router.callback_query(F.data.startswith(CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX))(handle_team_subscription_league_selected)
+    router.callback_query(F.data.startswith(CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX))(handle_team_subscription_toggle)
     router.callback_query(F.data.startswith(CALLBACK_TABLE_PREFIX))(handle_table_selected)
     router.callback_query(F.data.startswith(CALLBACK_CURRENT_ROUND_PREFIX))(handle_current_round_selected)
     router.message(F.chat.type.in_({"group", "supergroup"}))(handle_group_message)
@@ -190,6 +287,16 @@ def _strip_callback_prefix(value: str | None, prefix: str) -> str:
     if value is None or not value.startswith(prefix):
         return ""
     return value.removeprefix(prefix)
+
+
+def _parse_team_subscription_callback(value: str | None) -> tuple[str, int | None]:
+    payload = _strip_callback_prefix(value, CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX)
+    if not payload or ":" not in payload:
+        return "", None
+    league_code, team_id_value = payload.split(":", maxsplit=1)
+    if not league_code or not team_id_value.isdecimal():
+        return "", None
+    return league_code, int(team_id_value)
 
 
 def _league_name_by_code(code: str) -> str:

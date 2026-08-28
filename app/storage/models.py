@@ -37,6 +37,7 @@ class League(TimestampMixin, Base):
     rounds: Mapped[list[Round]] = relationship(back_populates="league")
     matches: Mapped[list[Match]] = relationship(back_populates="league")
     subscriptions: Mapped[list[Subscription]] = relationship(back_populates="league")
+    team_subscriptions: Mapped[list[TeamSubscription]] = relationship(back_populates="league")
 
 
 class Season(TimestampMixin, Base):
@@ -64,6 +65,8 @@ class Team(TimestampMixin, Base):
     source_name: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    team_subscriptions: Mapped[list[TeamSubscription]] = relationship(back_populates="team")
 
 
 class Round(TimestampMixin, Base):
@@ -191,6 +194,7 @@ class User(TimestampMixin, Base):
     language_code: Mapped[str | None] = mapped_column(String(16))
 
     subscriptions: Mapped[list[Subscription]] = relationship(back_populates="user")
+    team_subscriptions: Mapped[list[TeamSubscription]] = relationship(back_populates="user")
     notification_logs: Mapped[list[NotificationLog]] = relationship(back_populates="user")
 
 
@@ -208,6 +212,26 @@ class Subscription(TimestampMixin, Base):
 
     user: Mapped[User] = relationship(back_populates="subscriptions")
     league: Mapped[League] = relationship(back_populates="subscriptions")
+
+
+class TeamSubscription(TimestampMixin, Base):
+    __tablename__ = "team_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "league_id", "team_id", name="uq_team_subscriptions_user_league_team"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    league_id: Mapped[int] = mapped_column(ForeignKey("leagues.id", ondelete="CASCADE"), nullable=False, index=True)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"), nullable=False, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    notify_results: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    notify_upcoming: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    notify_digest: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+
+    user: Mapped[User] = relationship(back_populates="team_subscriptions")
+    league: Mapped[League] = relationship(back_populates="team_subscriptions")
+    team: Mapped[Team] = relationship(back_populates="team_subscriptions")
 
 
 class ParserRun(Base):

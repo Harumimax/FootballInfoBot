@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import UniqueConstraint
 
-from app.storage.models import Base, League, Match, MatchGoalEvent, NotificationLog, Subscription
+from app.storage.models import Base, League, Match, MatchGoalEvent, NotificationLog, Subscription, TeamSubscription
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +22,7 @@ EXPECTED_TABLES = {
     "standings_rows",
     "users",
     "subscriptions",
+    "team_subscriptions",
     "parser_runs",
     "data_change_events",
     "notification_log",
@@ -50,6 +51,9 @@ class StorageModelsTest(unittest.TestCase):
 
     def test_subscription_has_user_league_identity(self) -> None:
         self.assertTrue(_has_unique_constraint(Subscription, "user_id", "league_id"))
+
+    def test_team_subscription_has_user_league_team_identity(self) -> None:
+        self.assertTrue(_has_unique_constraint(TeamSubscription, "user_id", "league_id", "team_id"))
 
     def test_notification_log_has_dedupe_key_identity(self) -> None:
         self.assertTrue(_has_unique_constraint(NotificationLog, "dedupe_key"))
@@ -88,6 +92,13 @@ class StorageModelsTest(unittest.TestCase):
 
         self.assertIn("dedupe_key", migration_text)
         self.assertIn("uq_notification_log_dedupe_key", migration_text)
+
+    def test_team_subscription_migration_adds_table(self) -> None:
+        migration = PROJECT_ROOT / "migrations" / "versions" / "202608280002_add_team_subscriptions.py"
+        migration_text = migration.read_text(encoding="utf-8")
+
+        self.assertIn("team_subscriptions", migration_text)
+        self.assertIn("uq_team_subscriptions_user_league_team", migration_text)
 
 
 def _has_unique_constraint(model: type[object], *column_names: str) -> bool:

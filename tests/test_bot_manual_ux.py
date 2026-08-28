@@ -10,12 +10,20 @@ from app.bot.handlers.start import (
     handle_my_subscriptions,
     handle_private_start,
     handle_subscribe_menu,
+    handle_subscription_league_menu,
     handle_subscription_toggle,
     handle_table_selected,
+    handle_team_subscription_league_menu,
+    handle_team_subscription_league_selected,
+    handle_team_subscription_toggle,
 )
 from app.bot.keyboards import (
     CALLBACK_CURRENT_ROUND_PREFIX,
+    CALLBACK_SUBSCRIPTION_LEAGUE_MENU,
+    CALLBACK_SUBSCRIPTION_TEAM_LEAGUE_MENU,
     CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX,
+    CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX,
+    CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX,
     CALLBACK_TABLE_PREFIX,
     MENU_CURRENT_ROUND,
     MENU_HELP,
@@ -25,7 +33,9 @@ from app.bot.keyboards import (
     build_current_round_league_keyboard,
     build_main_menu_keyboard,
     build_subscription_keyboard,
+    build_subscription_type_keyboard,
     build_table_league_keyboard,
+    build_team_subscription_keyboard,
 )
 from app.bot.messages import (
     NO_DATA_MESSAGE,
@@ -39,7 +49,15 @@ from app.bot.messages import (
     render_unsubscribed_message,
 )
 from app.parser.dto import ParsedMatch, ParsedRound, ParsedStandingRow
-from app.services.subscriptions.dto import CurrentRoundView, LeagueView, StandingTableView, SubscriptionToggleResult
+from app.services.subscriptions.dto import (
+    CurrentRoundView,
+    LeagueView,
+    StandingTableView,
+    SubscriptionToggleResult,
+    TeamSubscriptionToggleResult,
+    TeamSubscriptionView,
+    TeamView,
+)
 
 
 class BotManualUxTest(unittest.TestCase):
@@ -86,6 +104,25 @@ class BotManualUxTest(unittest.TestCase):
         self.assertEqual(first_button.text, "✓ Англия")
         self.assertEqual(first_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}england")
         self.assertEqual(second_button.text, "Испания")
+
+    def test_subscription_type_keyboard_offers_league_or_team_path(self) -> None:
+        keyboard = build_subscription_type_keyboard()
+
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "Подписаться на Лигу или Турнир")
+        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, CALLBACK_SUBSCRIPTION_LEAGUE_MENU)
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "Подписаться на команду")
+        self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, CALLBACK_SUBSCRIPTION_TEAM_LEAGUE_MENU)
+
+    def test_team_subscription_keyboard_sorts_and_marks_active_teams(self) -> None:
+        keyboard = build_team_subscription_keyboard(
+            league_code="spain",
+            teams=(TeamView(id=2, name="Севилья"), TeamView(id=1, name="Алавес")),
+            subscribed_team_ids=frozenset({2}),
+        )
+
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "Алавес")
+        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX}spain:1")
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓ Севилья")
 
     def test_manual_league_keyboards_use_all_mvp_leagues(self) -> None:
         table_keyboard = build_table_league_keyboard()
@@ -159,6 +196,18 @@ class BotManualUxTest(unittest.TestCase):
 
     def test_subscription_messages_are_compact(self) -> None:
         self.assertEqual(render_subscriptions_message(()), "У вас пока нет подписок.")
+        self.assertEqual(
+            render_subscriptions_message(
+                (LeagueView(code="spain", name="Испания"),),
+                (
+                    TeamSubscriptionView(
+                        league=LeagueView(code="england", name="Англия"),
+                        team=TeamView(id=7, name="Арсенал"),
+                    ),
+                ),
+            ),
+            "Ваши подписки:\n\nЛиги и турниры:\nИспания\n\nКоманды:\nАрсенал (Англия)",
+        )
         self.assertEqual(render_unsubscribed_message("Англии"), "Вы отписались от Англии.")
 
     def test_dispatcher_registers_router_with_admin_context(self) -> None:
@@ -179,21 +228,77 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(message.answers[0].text, render_start_message())
 
     async def test_my_subscriptions_reads_active_subscriptions(self) -> None:
-        service = FakeFootballUserService(subscriptions=(LeagueView(code="england", name="Англия"),))
+        service = FakeFootballUserService(
+            subscriptions=(LeagueView(code="england", name="Англия"),),
+            team_subscriptions=(
+                TeamSubscriptionView(
+                    league=LeagueView(code="spain", name="Испания"),
+                    team=TeamView(id=10, name="Барселона"),
+                ),
+            ),
+        )
         message = FakeMessage(user_id=123)
 
         await handle_my_subscriptions(message, football_user_service=service)
 
-        self.assertEqual(message.answers[0].text, "Ваши подписки:\n\nАнглия")
+        self.assertEqual(
+            message.answers[0].text,
+            "Ваши подписки:\n\nЛиги и турниры:\nАнглия\n\nКоманды:\nБарселона (Испания)",
+        )
 
     async def test_subscribe_menu_marks_existing_subscriptions(self) -> None:
-        service = FakeFootballUserService(subscription_codes=frozenset({"spain"}))
         message = FakeMessage(user_id=123)
 
-        await handle_subscribe_menu(message, football_user_service=service)
+        await handle_subscribe_menu(message)
 
         keyboard = message.answers[0].reply_markup
+        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, CALLBACK_SUBSCRIPTION_LEAGUE_MENU)
+
+    async def test_subscription_league_menu_marks_existing_subscriptions(self) -> None:
+        service = FakeFootballUserService(subscription_codes=frozenset({"spain"}))
+        callback = FakeCallback(data=CALLBACK_SUBSCRIPTION_LEAGUE_MENU, user_id=123)
+
+        await handle_subscription_league_menu(callback, football_user_service=service)
+
+        keyboard = callback.message.answers[0].reply_markup
         self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓ Испания")
+
+    async def test_team_subscription_flow_shows_leagues_then_teams(self) -> None:
+        service = FakeFootballUserService(
+            teams=(TeamView(id=2, name="Севилья"), TeamView(id=1, name="Алавес")),
+            team_subscription_ids=frozenset({1}),
+        )
+        callback = FakeCallback(data=CALLBACK_SUBSCRIPTION_TEAM_LEAGUE_MENU, user_id=123)
+
+        await handle_team_subscription_league_menu(callback)
+
+        self.assertEqual(
+            callback.message.answers[0].reply_markup.inline_keyboard[0][0].callback_data,
+            f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}england",
+        )
+
+        league_callback = FakeCallback(data=f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}spain", user_id=123)
+        await handle_team_subscription_league_selected(league_callback, football_user_service=service)
+
+        self.assertEqual(service.requested_team_leagues, ["spain"])
+        keyboard = league_callback.message.answers[0].reply_markup
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✓ Алавес")
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "Севилья")
+
+    async def test_team_subscription_toggle_sends_status_message(self) -> None:
+        service = FakeFootballUserService(
+            team_toggle_result=TeamSubscriptionToggleResult(
+                league=LeagueView(code="spain", name="Испания"),
+                team=TeamView(id=5, name="Барселона"),
+                is_active=True,
+            )
+        )
+        callback = FakeCallback(data=f"{CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX}spain:5", user_id=123)
+
+        await handle_team_subscription_toggle(callback, football_user_service=service)
+
+        self.assertEqual(service.toggled_teams, [(123, "spain", 5)])
+        self.assertEqual(callback.message.answers[0].text, "Вы подписались на Барселона (Испания).")
 
     async def test_subscription_toggle_sends_current_round_when_enabled(self) -> None:
         round_ = _sample_round()
@@ -330,19 +435,29 @@ class FakeFootballUserService:
         *,
         subscriptions: tuple[LeagueView, ...] = (),
         subscription_codes: frozenset[str] = frozenset(),
+        team_subscriptions: tuple[TeamSubscriptionView, ...] = (),
+        team_subscription_ids: frozenset[int] = frozenset(),
+        teams: tuple[TeamView, ...] = (),
         toggle_result: SubscriptionToggleResult | None = None,
+        team_toggle_result: TeamSubscriptionToggleResult | None = None,
         standings: StandingTableView | None = None,
         current_round: CurrentRoundView | None = None,
     ) -> None:
         self.subscriptions = subscriptions
         self.subscription_codes = subscription_codes
+        self.team_subscriptions = team_subscriptions
+        self.team_subscription_ids = team_subscription_ids
+        self.teams = teams
         self.toggle_result = toggle_result
+        self.team_toggle_result = team_toggle_result
         self.standings = standings
         self.current_round = current_round
         self.registered_profiles = []
         self.toggled: list[tuple[int, str]] = []
+        self.toggled_teams: list[tuple[int, str, int]] = []
         self.requested_standings: list[str] = []
         self.requested_rounds: list[str] = []
+        self.requested_team_leagues: list[str] = []
 
     async def register_user(self, profile) -> None:
         self.registered_profiles.append(profile)
@@ -350,13 +465,34 @@ class FakeFootballUserService:
     async def get_subscriptions(self, telegram_user_id: int) -> tuple[LeagueView, ...]:
         return self.subscriptions
 
+    async def get_team_subscriptions(self, telegram_user_id: int) -> tuple[TeamSubscriptionView, ...]:
+        return self.team_subscriptions
+
     async def get_subscription_codes(self, telegram_user_id: int) -> frozenset[str]:
         return self.subscription_codes
+
+    async def get_team_subscription_ids(self, telegram_user_id: int, league_code: str) -> frozenset[int]:
+        return self.team_subscription_ids
+
+    async def get_league_teams(self, league_code: str) -> tuple[TeamView, ...]:
+        self.requested_team_leagues.append(league_code)
+        return self.teams
 
     async def toggle_subscription(self, *, telegram_user_id: int, league_code: str) -> SubscriptionToggleResult:
         self.toggled.append((telegram_user_id, league_code))
         assert self.toggle_result is not None
         return self.toggle_result
+
+    async def toggle_team_subscription(
+        self,
+        *,
+        telegram_user_id: int,
+        league_code: str,
+        team_id: int,
+    ) -> TeamSubscriptionToggleResult:
+        self.toggled_teams.append((telegram_user_id, league_code, team_id))
+        assert self.team_toggle_result is not None
+        return self.team_toggle_result
 
     async def get_latest_standings(self, league_code: str) -> StandingTableView | None:
         self.requested_standings.append(league_code)

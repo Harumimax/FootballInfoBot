@@ -6,6 +6,9 @@ from app.services.subscriptions.dto import (
     StandingTableView,
     SubscriptionToggleResult,
     TelegramUserProfile,
+    TeamSubscriptionToggleResult,
+    TeamSubscriptionView,
+    TeamView,
 )
 
 __all__ = [
@@ -14,4 +17,7 @@ __all__ = [
     "StandingTableView",
     "SubscriptionToggleResult",
     "TelegramUserProfile",
+    "TeamSubscriptionToggleResult",
+    "TeamSubscriptionView",
+    "TeamView",
 ]

@@ -36,15 +36,26 @@ class SubscriberView:
 
 
 @dataclass(frozen=True)
+class TeamSubscriberView:
+    user_id: int
+    telegram_user_id: int
+    team_id: int
+    team_name: str
+
+
+@dataclass(frozen=True)
 class PushNotification:
     telegram_user_id: int
     league_code: str
     kind: PushKind
     match_date: date
     text: str
+    team_id: int | None = None
 
     @property
     def dedupe_key(self) -> str:
+        if self.team_id is not None:
+            return f"{self.kind.value}:{self.match_date.isoformat()}:{self.league_code}:team:{self.team_id}:{self.telegram_user_id}"
         return f"{self.kind.value}:{self.match_date.isoformat()}:{self.league_code}:{self.telegram_user_id}"
 
 
@@ -62,6 +73,9 @@ class PushDataRepository(Protocol):
         pass
 
     async def get_active_subscribers_for_league(self, league_code: str) -> tuple[SubscriberView, ...]:
+        pass
+
+    async def get_active_team_subscribers_for_league(self, league_code: str) -> tuple[TeamSubscriberView, ...]:
         pass
 
     async def was_notification_sent(self, dedupe_key: str) -> bool:
@@ -157,14 +171,40 @@ class PushNotificationService:
                     match_date=match_date,
                     text=text,
                 )
-                if await self._repository.was_notification_sent(notification.dedupe_key):
+                if await self._send_notification(notification):
+                    sent_count += 1
+
+            team_subscribers = await self._repository.get_active_team_subscribers_for_league(state.league.code)
+            state_rounds = state.rounds or ((state.round,) if state.round is not None else ())
+            for subscriber in team_subscribers:
+                team_rounds = _filter_rounds_by_team(state_rounds, subscriber.team_name)
+                if not _has_match_on_date(team_rounds, match_date):
                     continue
 
-                await self._sender.send(notification)
-                await self._repository.record_notification_sent(notification)
-                sent_count += 1
+                notification = PushNotification(
+                    telegram_user_id=subscriber.telegram_user_id,
+                    league_code=state.league.code,
+                    kind=kind,
+                    match_date=match_date,
+                    text=render_matchday_rounds_state(
+                        f"{state.league.name}. {subscriber.team_name}",
+                        team_rounds,
+                        match_date,
+                    ),
+                    team_id=subscriber.team_id,
+                )
+                if await self._send_notification(notification):
+                    sent_count += 1
 
         return sent_count, skipped_leagues
+
+    async def _send_notification(self, notification: PushNotification) -> bool:
+        if await self._repository.was_notification_sent(notification.dedupe_key):
+            return False
+
+        await self._sender.send(notification)
+        await self._repository.record_notification_sent(notification)
+        return True
 
 
 def should_run_after_matchday_check(checked_at: datetime) -> bool:
@@ -182,3 +222,25 @@ def after_matchday_target_date(checked_at: datetime) -> date:
 def _is_last_after_matchday_check(checked_at: datetime) -> bool:
     current_time = checked_at.time().replace(second=0, microsecond=0)
     return current_time == AFTER_MATCHDAY_LAST_CHECK_TIME
+
+
+def _filter_rounds_by_team(rounds: tuple[ParsedRound, ...], team_name: str) -> tuple[ParsedRound, ...]:
+    normalized_team_name = team_name.casefold()
+    filtered_rounds = []
+    for round_ in rounds:
+        matches = tuple(
+            match
+            for match in round_.matches
+            if match.home_team.casefold() == normalized_team_name or match.away_team.casefold() == normalized_team_name
+        )
+        if matches:
+            filtered_rounds.append(ParsedRound(number=round_.number, source_url=round_.source_url, matches=matches))
+    return tuple(filtered_rounds)
+
+
+def _has_match_on_date(rounds: tuple[ParsedRound, ...], match_date: date) -> bool:
+    return any(
+        match.scheduled_at is not None and match.scheduled_at.date() == match_date
+        for round_ in rounds
+        for match in round_.matches
+    )
