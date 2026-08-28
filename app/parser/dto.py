@@ -12,6 +12,14 @@ class ParsedLeague:
 
 
 @dataclass(frozen=True)
+class ParsedGoalEvent:
+    minute: str
+    scorer_name: str
+    score_after: str | None = None
+    position: int = 0
+
+
+@dataclass(frozen=True)
 class ParsedMatch:
     home_team: str
     away_team: str
@@ -20,6 +28,8 @@ class ParsedMatch:
     away_score: int | None
     status: str
     source_url: str | None = None
+    goal_events: tuple[ParsedGoalEvent, ...] = ()
+    goal_events_loaded: bool = False
 
 
 @dataclass(frozen=True)

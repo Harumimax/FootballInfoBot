@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 
-from app.parser.dto import LeaguePageData, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow
-from app.storage.models import Round, StandingRow
+from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow
+from app.storage.models import MatchGoalEvent, Round, StandingRow
 from app.storage.repositories import FootballDataSqlAlchemyRepository
 
 
@@ -16,6 +16,9 @@ class FakeAsyncSession:
 
     async def scalar(self, statement: object) -> None:
         return None
+
+    async def execute(self, statement: object) -> tuple:
+        return ()
 
     def add(self, entity: object) -> None:
         self.added.append(entity)
@@ -131,6 +134,46 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(standing_row.goals_against, 2)
         self.assertEqual(standing_row.goal_difference, 4)
         self.assertEqual(standing_row.points, 6)
+
+    async def test_save_league_page_data_persists_goal_events(self) -> None:
+        session = FakeAsyncSession()
+        repository = FootballDataSqlAlchemyRepository(session)
+        data = LeaguePageData(
+            league=ParsedLeague(code="spain", name="Испания", source_url="https://football.kulichki.net/spain/"),
+            season_label="2026/2027",
+            source_season_key="2027",
+            current_round=ParsedRound(
+                number=1,
+                source_url="https://football.kulichki.net/spain/2027/1/",
+                matches=(
+                    ParsedMatch(
+                        home_team="Барселона",
+                        away_team="Атлетик",
+                        scheduled_at=datetime(2026, 8, 27, 22, 0),
+                        home_score=2,
+                        away_score=0,
+                        status="finished",
+                        source_url="https://football.kulichki.net/spain/2027/1/3-Barselona-Atletik-obzor-matcha-spain-2027.htm",
+                        goal_events=(
+                            ParsedGoalEvent(minute="37", scorer_name="Рафинья", score_after="1:0", position=1),
+                            ParsedGoalEvent(minute="82", scorer_name="Фермин Лопес", score_after="2:0", position=2),
+                        ),
+                        goal_events_loaded=True,
+                    ),
+                ),
+            ),
+            standings=(),
+        )
+
+        await repository.save_league_page_data(data)
+
+        added_goal_events = [entity for entity in session.added if isinstance(entity, MatchGoalEvent)]
+        self.assertEqual(len(added_goal_events), 2)
+        self.assertEqual(added_goal_events[0].minute, "37")
+        self.assertEqual(added_goal_events[0].scorer_name, "Рафинья")
+        self.assertEqual(added_goal_events[0].score_after, "1:0")
+        self.assertEqual(added_goal_events[1].minute, "82")
+        self.assertEqual(added_goal_events[1].scorer_name, "Фермин Лопес")
 
 
 if __name__ == "__main__":

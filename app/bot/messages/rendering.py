@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from app.parser.dto import ParsedMatch, ParsedRound, ParsedStandingRow
 from app.services.subscriptions.dto import StandingTableView
@@ -99,6 +99,31 @@ def render_rounds_state(league_name: str, rounds: tuple[ParsedRound, ...]) -> st
     return "\n".join(lines)
 
 
+def render_matchday_rounds_state(league_name: str, rounds: tuple[ParsedRound, ...], match_date: date) -> str:
+    visible_rounds = tuple(round_ for round_ in rounds if round_.matches)
+    if not visible_rounds:
+        return NO_DATA_MESSAGE
+
+    today_matches = [
+        match
+        for round_ in visible_rounds
+        for match in round_.matches
+        if match.scheduled_at is not None and match.scheduled_at.date() == match_date
+    ]
+
+    if not today_matches:
+        return render_rounds_state(league_name, visible_rounds)
+
+    lines = [league_name, "", "Матчи сегодня:"]
+    for match in today_matches:
+        lines.extend(_format_match_lines(match, include_goal_events=True))
+
+    for round_ in visible_rounds:
+        lines.extend(("", f"{round_.number}-й тур"))
+        lines.extend(_format_match(match) for match in round_.matches)
+    return "\n".join(lines)
+
+
 def render_standings(table: StandingTableView | None) -> str:
     if table is None or not table.rows:
         return NO_DATA_MESSAGE
@@ -129,6 +154,13 @@ def _format_match(match: ParsedMatch) -> str:
         return f"{date_time} {match.home_team} - {match.away_team}"
 
     return f"{date_time} {match.home_team} {match.home_score}:{match.away_score} {match.away_team}"
+
+
+def _format_match_lines(match: ParsedMatch, *, include_goal_events: bool) -> list[str]:
+    lines = [_format_match(match)]
+    if include_goal_events:
+        lines.extend(f"{event.minute} {event.scorer_name}" for event in match.goal_events)
+    return lines
 
 
 def _format_match_datetime(value: datetime | None) -> str:

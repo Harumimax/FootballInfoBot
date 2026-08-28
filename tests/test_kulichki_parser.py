@@ -176,6 +176,23 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(first_standing.goal_difference, 4)
         self.assertEqual(first_standing.points, 6)
 
+    def test_parse_match_page_extracts_goal_events_from_review(self) -> None:
+        html = _read_fixture("spain_match_review_live.html")
+
+        goals = self.parser.parse_match_page(
+            html,
+            url="https://football.kulichki.net/spain/2027/1/3-Barselona-Atletik-obzor-matcha-spain-2027.htm",
+        )
+
+        self.assertEqual(len(goals), 2)
+        self.assertEqual(goals[0].minute, "37")
+        self.assertEqual(goals[0].scorer_name, "Рафинья")
+        self.assertEqual(goals[0].score_after, "1:0")
+        self.assertEqual(goals[0].position, 1)
+        self.assertEqual(goals[1].minute, "82")
+        self.assertEqual(goals[1].scorer_name, "Фермин Лопес")
+        self.assertEqual(goals[1].score_after, "2:0")
+
 
 def _read_fixture(name: str) -> str:
     return (FIXTURES_DIR / name).read_text(encoding="utf-8")

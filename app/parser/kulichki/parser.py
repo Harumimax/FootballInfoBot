@@ -6,7 +6,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
-from app.parser.dto import LeaguePageData, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow, RoundPageData
+from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow, RoundPageData
 
 
 SOURCE_NAME = "kulichki"
@@ -14,6 +14,10 @@ ROUND_TITLE_RE = re.compile(r"(?P<number>\d+)\s*[-–]?\s*(?:й|ый|ой)?\s*т
 SEASON_RE = re.compile(r"(?P<start>\d{4})\s*/\s*(?P<end>\d{4})")
 SCORE_RE = re.compile(r"(?P<home>\d+)\s*[:\-]\s*(?P<away>\d+)")
 TIME_RE = re.compile(r"(?P<hour>\d{1,2})[:\-](?P<minute>\d{2})")
+GOAL_EVENT_RE = re.compile(
+    r"(?P<scorer>[А-ЯЁA-Z][^.,\n]+?)\s*,\s*(?P<minute>\d{1,3}(?:\+\d{1,2})?)\s*\((?P<score>\d+\s*[:\-]\s*\d+)\)",
+    re.IGNORECASE,
+)
 DATE_TIME_RE = re.compile(
     r"(?P<day>\d{1,2})[.\-/](?P<month>\d{1,2})(?:[.\-/](?P<year>\d{2,4}))?\s+"
     r"(?P<hour>\d{1,2})[:\-](?P<minute>\d{2})"
@@ -112,6 +116,10 @@ class KulichkiParser:
                 ),
             ),
         )
+
+    def parse_match_page(self, html: str, *, url: str) -> tuple[ParsedGoalEvent, ...]:
+        soup = BeautifulSoup(html, "html.parser")
+        return tuple(_extract_goal_events(soup))
 
 
 def _extract_season(text: str) -> tuple[str | None, str | None]:
@@ -553,6 +561,33 @@ def _parse_goal_difference(value: str) -> int | None:
     if goals_for is None or goals_against is None:
         return None
     return goals_for - goals_against
+
+
+def _extract_goal_events(soup: BeautifulSoup) -> list[ParsedGoalEvent]:
+    lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if SCORE_RE.search(line) is None:
+            continue
+        if " - " not in line:
+            continue
+        events = _parse_goal_events_line(" ".join(lines[index + 1 : index + 8]))
+        if events:
+            return events
+    return []
+
+
+def _parse_goal_events_line(line: str) -> list[ParsedGoalEvent]:
+    events = []
+    for position, match in enumerate(GOAL_EVENT_RE.finditer(line), start=1):
+        events.append(
+            ParsedGoalEvent(
+                minute=match.group("minute"),
+                scorer_name=_clean_team_name(match.group("scorer")),
+                score_after=match.group("score").replace("-", ":").replace(" ", ""),
+                position=position,
+            )
+        )
+    return events
 
 
 def _extract_first_link(row: Tag, *, page_url: str) -> str | None:

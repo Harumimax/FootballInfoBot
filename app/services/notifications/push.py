@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 from enum import StrEnum
 from typing import Callable, Protocol
 
-from app.bot.messages import LeagueView, render_round_state, render_rounds_state
+from app.bot.messages import LeagueView, render_matchday_rounds_state, render_round_state
 from app.parser.dto import ParsedRound
 
 
@@ -142,7 +142,11 @@ class PushNotificationService:
                 skipped_leagues.append(state.league.code)
                 continue
 
-            text = render_rounds_state(state.league.name, state.rounds) if state.rounds else render_round_state(state.league.name, state.round)
+            text = (
+                render_matchday_rounds_state(state.league.name, state.rounds, match_date)
+                if state.rounds
+                else render_round_state(state.league.name, state.round)
+            )
             subscribers = await self._repository.get_active_subscribers_for_league(state.league.code)
 
             for subscriber in subscribers:

@@ -14,8 +14,15 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "kulichki"
 
 
 class FakePageClient:
-    def __init__(self, page: FetchedPage | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        page: FetchedPage | None = None,
+        *,
+        pages_by_url: dict[str, FetchedPage] | None = None,
+        error: Exception | None = None,
+    ) -> None:
         self.page = page
+        self.pages_by_url = pages_by_url or {}
         self.error = error
         self.fetched_urls: list[str] = []
 
@@ -23,6 +30,8 @@ class FakePageClient:
         self.fetched_urls.append(url)
         if self.error is not None:
             raise self.error
+        if url in self.pages_by_url:
+            return self.pages_by_url[url]
         assert self.page is not None
         return self.page
 
@@ -100,6 +109,47 @@ class LeagueSyncServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "success")
         self.assertEqual(result.current_round_number, 3)
         self.assertEqual(result.parsed_matches, 14)
+
+    async def test_sync_league_enriches_finished_matches_with_goal_events(self) -> None:
+        league_html = _read_fixture("spain_league_live.html")
+        match_url = "https://football.kulichki.net/spain/2027/1/4-Valensija-Betis-obzor-matcha-spain-2027.htm"
+        client = FakePageClient(
+            pages_by_url={
+                "https://football.kulichki.net/spain/": FetchedPage(
+                    url="https://football.kulichki.net/spain/",
+                    html=league_html,
+                    status_code=200,
+                ),
+                match_url: FetchedPage(
+                    url=match_url,
+                    html=_read_fixture("spain_match_review_live.html"),
+                    status_code=200,
+                ),
+            }
+        )
+        repository = FakeFootballDataRepository()
+        service = LeagueSyncService(
+            page_client=client,
+            parser=KulichkiParser(base_url="https://football.kulichki.net"),
+            repository=repository,
+            league_sources=(
+                LeagueSource(code="spain", name="Испания", url="https://football.kulichki.net/spain/"),
+            ),
+        )
+
+        result = await service.sync_league("spain")
+
+        self.assertEqual(result.status, "success")
+        self.assertIn(match_url, client.fetched_urls)
+        saved_matches = [
+            match
+            for round_ in repository.saved_pages[0].rounds
+            for match in round_.matches
+            if match.source_url == match_url
+        ]
+        self.assertEqual(len(saved_matches), 1)
+        self.assertTrue(saved_matches[0].goal_events_loaded)
+        self.assertEqual([event.scorer_name for event in saved_matches[0].goal_events], ["Рафинья", "Фермин Лопес"])
 
     async def test_sync_league_records_failed_parser_run_when_fetch_fails(self) -> None:
         client = FakePageClient(error=RuntimeError("source unavailable"))

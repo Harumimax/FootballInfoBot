@@ -4,8 +4,8 @@ import unittest
 from datetime import datetime
 
 from app.bot.messages import LeagueView
-from app.bot.messages.rendering import render_rounds_state
-from app.parser.dto import ParsedMatch, ParsedRound
+from app.bot.messages.rendering import render_matchday_rounds_state
+from app.parser.dto import ParsedGoalEvent, ParsedMatch, ParsedRound
 from app.scheduler.jobs import mvp_push_job_specs
 from app.services.notifications import (
     LeagueRoundState,
@@ -102,8 +102,9 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.sent_count, 1)
         self.assertEqual(
             sender.sent_notifications[0].text,
-            render_rounds_state("Испания", (_sample_round(), _catch_up_round())),
+            render_matchday_rounds_state("Испания", (_sample_round(), _catch_up_round()), datetime(2026, 8, 27).date()),
         )
+        self.assertIn("Матчи сегодня:", sender.sent_notifications[0].text)
         self.assertIn("3-й тур", sender.sent_notifications[0].text)
         self.assertIn("1-й тур", sender.sent_notifications[0].text)
 
@@ -196,6 +197,35 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.pending_leagues, ())
         self.assertEqual(sender.sent_notifications[0].kind, PushKind.AFTER_MATCHDAY)
         self.assertEqual(sender.sent_notifications[0].dedupe_key, "after_matchday:2026-08-27:spain:1001")
+
+    async def test_after_matchday_push_includes_today_matches_with_goal_events(self) -> None:
+        rounds = (_round_with_goal_events(), _catch_up_round())
+        repository = FakePushRepository(
+            states=(
+                LeagueRoundState(
+                    league=LeagueView(code="spain", name="Испания"),
+                    round=rounds[0],
+                    rounds=rounds,
+                    has_match_today=True,
+                    all_today_matches_finished=True,
+                    has_changes_today=True,
+                ),
+            ),
+            subscribers_by_league={"spain": (SubscriberView(user_id=1, telegram_user_id=1001),)},
+        )
+        sender = FakePushSender()
+        service = PushNotificationService(repository=repository, sender=sender)
+
+        await service.check_after_matchday_pushes(datetime(2026, 8, 27, 23, 0))
+
+        self.assertEqual(
+            sender.sent_notifications[0].text,
+            render_matchday_rounds_state("Испания", rounds, datetime(2026, 8, 27).date()),
+        )
+        self.assertIn("Матчи сегодня:", sender.sent_notifications[0].text)
+        self.assertIn("27.08 22:00 Барселона 2:0 Атлетик", sender.sent_notifications[0].text)
+        self.assertIn("37 Рафинья", sender.sent_notifications[0].text)
+        self.assertIn("82 Фермин Лопес", sender.sent_notifications[0].text)
 
     async def test_after_matchday_push_sends_as_is_at_03_when_there_are_changes(self) -> None:
         repository = FakePushRepository(
@@ -307,6 +337,28 @@ def _catch_up_round() -> ParsedRound:
                 home_score=None,
                 away_score=None,
                 status="scheduled",
+            ),
+        ),
+    )
+
+
+def _round_with_goal_events() -> ParsedRound:
+    return ParsedRound(
+        number=1,
+        source_url="https://football.kulichki.net/spain/2027/1/",
+        matches=(
+            ParsedMatch(
+                home_team="Барселона",
+                away_team="Атлетик",
+                scheduled_at=datetime(2026, 8, 27, 22, 0),
+                home_score=2,
+                away_score=0,
+                status="finished",
+                goal_events=(
+                    ParsedGoalEvent(minute="37", scorer_name="Рафинья", score_after="1:0", position=1),
+                    ParsedGoalEvent(minute="82", scorer_name="Фермин Лопес", score_after="2:0", position=2),
+                ),
+                goal_events_loaded=True,
             ),
         ),
     )

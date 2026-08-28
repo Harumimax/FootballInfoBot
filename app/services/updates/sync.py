@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
 
 from app.parser.clients.http import FetchedPage
-from app.parser.dto import LeaguePageData
+from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedMatch, ParsedRound
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,9 @@ class PageClient(Protocol):
 
 class LeaguePageParser(Protocol):
     def parse_league_page(self, html: str, *, url: str, league_code: str, league_name: str) -> LeaguePageData:
+        pass
+
+    def parse_match_page(self, html: str, *, url: str) -> tuple[ParsedGoalEvent, ...]:
         pass
 
 
@@ -113,6 +116,7 @@ class LeagueSyncService:
                 league_code=league.code,
                 league_name=league.name,
             )
+            parsed_data = await self._enrich_match_goal_events(parsed_data)
             save_result = await self._repository.save_league_page_data(parsed_data)
             finished_at = datetime.now(tz=None).astimezone()
             await self._repository.record_parser_run(
@@ -162,3 +166,37 @@ class LeagueSyncService:
                 fetched_url=league.url,
                 error_message=str(error),
             )
+
+    async def _enrich_match_goal_events(self, data: LeaguePageData) -> LeaguePageData:
+        fetched_goal_events: dict[str, tuple[ParsedGoalEvent, ...]] = {}
+
+        async def enrich_match(match: ParsedMatch) -> ParsedMatch:
+            if not _should_fetch_goal_events(match):
+                return match
+            assert match.source_url is not None
+            if match.source_url not in fetched_goal_events:
+                try:
+                    page = await self._page_client.fetch(match.source_url)
+                    fetched_goal_events[match.source_url] = self._parser.parse_match_page(page.html, url=page.url)
+                except Exception:
+                    return match
+            return replace(match, goal_events=fetched_goal_events[match.source_url], goal_events_loaded=True)
+
+        async def enrich_round(round_: ParsedRound) -> ParsedRound:
+            return replace(round_, matches=tuple([await enrich_match(match) for match in round_.matches]))
+
+        source_rounds = data.rounds or ((data.current_round,) if data.current_round is not None else ())
+        rounds = tuple([await enrich_round(round_) for round_ in source_rounds])
+        current_round = data.current_round
+        if current_round is not None:
+            current_round = next((round_ for round_ in rounds if round_.number == current_round.number), current_round)
+
+        return replace(data, current_round=current_round, rounds=rounds)
+
+
+def _should_fetch_goal_events(match: ParsedMatch) -> bool:
+    if match.source_url is None:
+        return False
+    if match.status not in {"finished", "live"}:
+        return False
+    return match.home_score is not None and match.away_score is not None

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import UniqueConstraint
 
-from app.storage.models import Base, League, Match, NotificationLog, Subscription
+from app.storage.models import Base, League, Match, MatchGoalEvent, NotificationLog, Subscription
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +17,7 @@ EXPECTED_TABLES = {
     "teams",
     "rounds",
     "matches",
+    "match_goal_events",
     "standings_snapshots",
     "standings_rows",
     "users",
@@ -52,6 +53,9 @@ class StorageModelsTest(unittest.TestCase):
 
     def test_notification_log_has_dedupe_key_identity(self) -> None:
         self.assertTrue(_has_unique_constraint(NotificationLog, "dedupe_key"))
+
+    def test_match_goal_event_has_match_position_identity(self) -> None:
+        self.assertTrue(_has_unique_constraint(MatchGoalEvent, "match_id", "position"))
 
     def test_initial_migration_seeds_mvp_leagues(self) -> None:
         migration = PROJECT_ROOT / "migrations" / "versions" / "202608270001_initial_schema.py"

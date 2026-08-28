@@ -4,11 +4,11 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.parser.dto import LeaguePageData, ParsedMatch, ParsedRound, ParsedStandingRow
+from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.services.admin.dto import LeagueParserStatusView, LeagueToggleResult, ParserStatusView
 from app.services.subscriptions.dto import CurrentRoundView, LeagueView, StandingTableView, TelegramUserProfile
 from app.services.notifications.push import LeagueRoundState, PushNotification, SubscriberView
@@ -17,6 +17,7 @@ from app.storage.models import (
     DataChangeEvent,
     League,
     Match,
+    MatchGoalEvent,
     ParserRun,
     Round,
     Season,
@@ -57,6 +58,8 @@ class FootballDataSqlAlchemyRepository:
             )
             for parsed_match in parsed_round.matches:
                 result = await self._upsert_match(league, season, round_, parsed_match)
+                if parsed_match.goal_events_loaded:
+                    await self._replace_match_goal_events(result.match, parsed_match)
                 if result.created:
                     created_matches += 1
                     await self._add_change_event("match_created", league=league, match=result.match)
@@ -466,6 +469,20 @@ class FootballDataSqlAlchemyRepository:
         await self._session.flush()
         return MatchUpsertResult(match=match, created=False, changed=changed, finished_now=finished_now)
 
+    async def _replace_match_goal_events(self, match: Match, parsed_match: ParsedMatch) -> None:
+        await self._session.execute(delete(MatchGoalEvent).where(MatchGoalEvent.match_id == match.id))
+        for position, goal_event in enumerate(parsed_match.goal_events, start=1):
+            self._session.add(
+                MatchGoalEvent(
+                    match_id=match.id,
+                    position=goal_event.position or position,
+                    minute=goal_event.minute,
+                    scorer_name=goal_event.scorer_name,
+                    score_after=goal_event.score_after,
+                )
+            )
+        await self._session.flush()
+
     async def _upsert_team(self, source_name: str) -> Team:
         normalized_name = normalize_team_name(source_name)
         statement = select(Team).where(Team.source == "kulichki", Team.normalized_name == normalized_name)
@@ -649,17 +666,37 @@ class FootballDataSqlAlchemyRepository:
         )
         result = await self._session.execute(statement)
 
-        return tuple(
-            ParsedMatch(
-                home_team=home_name,
-                away_team=away_name,
-                scheduled_at=match.scheduled_at,
-                home_score=match.home_score,
-                away_score=match.away_score,
-                status=match.status,
-                source_url=match.source_url,
+        matches = []
+        for match, home_name, away_name in result:
+            matches.append(
+                ParsedMatch(
+                    home_team=home_name,
+                    away_team=away_name,
+                    scheduled_at=match.scheduled_at,
+                    home_score=match.home_score,
+                    away_score=match.away_score,
+                    status=match.status,
+                    source_url=match.source_url,
+                    goal_events=await self._load_match_goal_events(match),
+                    goal_events_loaded=True,
+                )
             )
-            for match, home_name, away_name in result
+        return tuple(matches)
+
+    async def _load_match_goal_events(self, match: Match) -> tuple[ParsedGoalEvent, ...]:
+        result = await self._session.scalars(
+            select(MatchGoalEvent)
+            .where(MatchGoalEvent.match_id == match.id)
+            .order_by(MatchGoalEvent.position, MatchGoalEvent.id)
+        )
+        return tuple(
+            ParsedGoalEvent(
+                minute=event.minute,
+                scorer_name=event.scorer_name,
+                score_after=event.score_after,
+                position=event.position,
+            )
+            for event in result
         )
 
     async def _load_standing_rows(self, snapshot: StandingSnapshot) -> tuple[ParsedStandingRow, ...]:

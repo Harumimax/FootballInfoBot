@@ -123,6 +123,21 @@ class Match(TimestampMixin, Base):
     home_team: Mapped[Team] = relationship(foreign_keys=[home_team_id])
     away_team: Mapped[Team] = relationship(foreign_keys=[away_team_id])
     change_events: Mapped[list[DataChangeEvent]] = relationship(back_populates="match")
+    goal_events: Mapped[list[MatchGoalEvent]] = relationship(back_populates="match", cascade="all, delete-orphan")
+
+
+class MatchGoalEvent(TimestampMixin, Base):
+    __tablename__ = "match_goal_events"
+    __table_args__ = (UniqueConstraint("match_id", "position", name="uq_match_goal_events_match_position"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    minute: Mapped[str] = mapped_column(String(16), nullable=False)
+    scorer_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    score_after: Mapped[str | None] = mapped_column(String(16))
+
+    match: Mapped[Match] = relationship(back_populates="goal_events")
 
 
 class StandingSnapshot(Base):
