@@ -30,6 +30,7 @@ from app.bot.keyboards import (
     MENU_MY_SUBSCRIPTIONS,
     MENU_STANDINGS,
     MENU_SUBSCRIBE,
+    build_active_subscriptions_keyboard,
     build_current_round_league_keyboard,
     build_main_menu_keyboard,
     build_subscription_keyboard,
@@ -112,6 +113,25 @@ class BotManualUxTest(unittest.TestCase):
         self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, CALLBACK_SUBSCRIPTION_LEAGUE_MENU)
         self.assertEqual(keyboard.inline_keyboard[1][0].text, "Подписаться на команду")
         self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, CALLBACK_SUBSCRIPTION_TEAM_LEAGUE_MENU)
+
+    def test_active_subscriptions_keyboard_allows_unsubscribe_by_click(self) -> None:
+        keyboard = build_active_subscriptions_keyboard(
+            leagues=(LeagueView(code="spain", name="Испания"),),
+            team_subscriptions=(
+                TeamSubscriptionView(
+                    league=LeagueView(code="england", name="Англия"),
+                    team=TeamView(id=7, name="Арсенал"),
+                ),
+            ),
+        )
+
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✓ Испания")
+        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}spain")
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓ Арсенал (Англия)")
+        self.assertEqual(
+            keyboard.inline_keyboard[1][0].callback_data,
+            f"{CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX}england:7",
+        )
 
     def test_team_subscription_keyboard_sorts_and_marks_active_teams(self) -> None:
         keyboard = build_team_subscription_keyboard(
@@ -206,7 +226,7 @@ class BotManualUxTest(unittest.TestCase):
                     ),
                 ),
             ),
-            "Ваши подписки:\n\nЛиги и турниры:\nИспания\n\nКоманды:\nАрсенал (Англия)",
+            "Ваши подписки:\n\nНажмите на подписку, чтобы отписаться.",
         )
         self.assertEqual(render_unsubscribed_message("Англии"), "Вы отписались от Англии.")
 
@@ -243,8 +263,11 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             message.answers[0].text,
-            "Ваши подписки:\n\nЛиги и турниры:\nАнглия\n\nКоманды:\nБарселона (Испания)",
+            "Ваши подписки:\n\nНажмите на подписку, чтобы отписаться.",
         )
+        keyboard = message.answers[0].reply_markup
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✓ Англия")
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓ Барселона (Испания)")
 
     async def test_subscribe_menu_marks_existing_subscriptions(self) -> None:
         message = FakeMessage(user_id=123)

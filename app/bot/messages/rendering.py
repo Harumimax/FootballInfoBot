@@ -58,14 +58,7 @@ def render_subscriptions_message(
     if not leagues and not team_subscriptions:
         return render_empty_subscriptions_message()
 
-    lines = ["Ваши подписки:"]
-    if leagues:
-        lines.extend(("", "Лиги и турниры:"))
-        lines.extend(league.name for league in leagues)
-    if team_subscriptions:
-        lines.extend(("", "Команды:"))
-        lines.extend(f"{subscription.team.name} ({subscription.league.name})" for subscription in team_subscriptions)
-    return "\n".join(lines)
+    return "Ваши подписки:\n\nНажмите на подписку, чтобы отписаться."
 
 
 def render_unsubscribed_message(league_name: str) -> str:

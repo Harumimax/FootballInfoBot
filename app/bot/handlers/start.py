@@ -18,6 +18,7 @@ from app.bot.keyboards import (
     MENU_MY_SUBSCRIPTIONS,
     MENU_STANDINGS,
     MENU_SUBSCRIBE,
+    build_active_subscriptions_keyboard,
     build_current_round_league_keyboard,
     build_main_menu_keyboard,
     build_subscription_keyboard,
@@ -76,7 +77,13 @@ async def handle_my_subscriptions(message: Message, football_user_service: Footb
     subscriptions = await football_user_service.get_subscriptions(telegram_user_id)
     team_subscriptions = await football_user_service.get_team_subscriptions(telegram_user_id)
     if subscriptions or team_subscriptions:
-        await message.answer(render_subscriptions_message(subscriptions, team_subscriptions))
+        await message.answer(
+            render_subscriptions_message(subscriptions, team_subscriptions),
+            reply_markup=build_active_subscriptions_keyboard(
+                leagues=subscriptions,
+                team_subscriptions=team_subscriptions,
+            ),
+        )
         return
 
     await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_type_keyboard())

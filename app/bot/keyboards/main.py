@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from app.bot.messages import LeagueView, MVP_LEAGUES
-from app.services.subscriptions.dto import TeamView
+from app.services.subscriptions.dto import TeamSubscriptionView, TeamView
 
 
 MENU_MY_SUBSCRIPTIONS = "Мои подписки"
@@ -71,6 +71,37 @@ def build_subscription_keyboard(
                 )
             ]
         )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_active_subscriptions_keyboard(
+    *,
+    leagues: tuple[LeagueView, ...],
+    team_subscriptions: tuple[TeamSubscriptionView, ...],
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"✓ {league.name}",
+                callback_data=f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}{league.code}",
+            )
+        ]
+        for league in leagues
+    ]
+    rows.extend(
+        [
+            [
+                InlineKeyboardButton(
+                    text=f"✓ {subscription.team.name} ({subscription.league.name})",
+                    callback_data=(
+                        f"{CALLBACK_TEAM_SUBSCRIPTION_TOGGLE_PREFIX}"
+                        f"{subscription.league.code}:{subscription.team.id}"
+                    ),
+                )
+            ]
+            for subscription in team_subscriptions
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
