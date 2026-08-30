@@ -157,18 +157,9 @@ def render_standings(table: StandingTableView | None) -> str:
 
 
 def _format_standing_row(row: ParsedStandingRow) -> str:
-    details = [
-        f"{row.played if row.played is not None else '-'} игр",
-        f"{row.points if row.points is not None else '-'} очк.",
-    ]
-
-    if row.wins is not None and row.draws is not None and row.losses is not None:
-        details.append(f"В{row.wins} Н{row.draws} П{row.losses}")
-
-    if row.goals_for is not None and row.goals_against is not None:
-        details.append(f"мячи {row.goals_for}-{row.goals_against}")
-
-    return f"{row.position}. {row.team_name} - {', '.join(details)}"
+    played = row.played if row.played is not None else "-"
+    points = row.points if row.points is not None else "-"
+    return f"{row.position}. {row.team_name} - {played} игр, {points} очк."
 
 
 def _format_match(match: ParsedMatch) -> str:

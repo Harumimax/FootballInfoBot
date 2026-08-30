@@ -219,7 +219,7 @@ class BotManualUxTest(unittest.TestCase):
         self.assertEqual(
             render_standings(table),
             "Испания. Турнирная таблица\n\n"
-            "1. Реал Мадрид - 2 игр, 6 очк., В2 Н0 П0, мячи 6-2\n"
+            "1. Реал Мадрид - 2 игр, 6 очк.\n"
             "2. Барселона - 2 игр, 4 очк.",
         )
 
