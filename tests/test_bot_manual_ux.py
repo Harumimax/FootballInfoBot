@@ -3,8 +3,10 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from app.bot.dispatcher import create_dispatcher
+from app.config import DEFAULT_TIMEZONE
 from app.bot.handlers.start import (
     handle_current_round_selected,
     handle_my_subscriptions,
@@ -42,6 +44,7 @@ from app.bot.messages import (
     NO_DATA_MESSAGE,
     render_group_not_supported_message,
     render_help_message,
+    render_matchday_rounds_state,
     render_round_state,
     render_rounds_state,
     render_start_message,
@@ -425,6 +428,31 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(callback.message.answers[0].text, render_rounds_state("Испания", (round_, catch_up_round)))
         self.assertIn("3-й тур", callback.message.answers[0].text)
         self.assertIn("1-й тур", callback.message.answers[0].text)
+
+    async def test_current_round_selected_includes_today_matches_block(self) -> None:
+        match_date = datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).date()
+        round_ = ParsedRound(
+            number=3,
+            source_url="https://football.kulichki.net/spain/2027/3/",
+            matches=(
+                ParsedMatch(
+                    home_team="Реал",
+                    away_team="Малага",
+                    scheduled_at=datetime(match_date.year, match_date.month, match_date.day, 18, 0),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+            ),
+        )
+        round_view = CurrentRoundView(league=LeagueView(code="spain", name="Испания"), round=round_, rounds=(round_,))
+        service = FakeFootballUserService(current_round=round_view)
+        callback = FakeCallback(data=f"{CALLBACK_CURRENT_ROUND_PREFIX}spain", user_id=123)
+
+        await handle_current_round_selected(callback, football_user_service=service)
+
+        self.assertEqual(callback.message.answers[0].text, render_matchday_rounds_state("Испания", (round_,), match_date))
+        self.assertIn("Матчи сегодня:", callback.message.answers[0].text)
 
 
 class FakeAnswer:

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 
 from app.bot.handlers.user_profile import telegram_profile_from_message
+from app.config import DEFAULT_TIMEZONE
 from app.bot.keyboards import (
     CALLBACK_CURRENT_ROUND_PREFIX,
     CALLBACK_SUBSCRIPTION_LEAGUE_MENU,
@@ -33,6 +37,7 @@ from app.bot.messages import (
     render_empty_subscriptions_message,
     render_group_not_supported_message,
     render_help_message,
+    render_matchday_rounds_state,
     render_round_state,
     render_rounds_state,
     render_select_league_for_round_message,
@@ -252,8 +257,9 @@ async def handle_current_round_selected(
         if round_view is None:
             await callback.message.answer(NO_DATA_MESSAGE)
         else:
+            match_date = datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).date()
             text = (
-                render_rounds_state(round_view.league.name, round_view.rounds)
+                render_matchday_rounds_state(round_view.league.name, round_view.rounds, match_date)
                 if round_view.rounds
                 else render_round_state(round_view.league.name, round_view.round)
             )
