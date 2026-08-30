@@ -32,6 +32,12 @@ class FakeAsyncSession:
 
 
 class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
+    async def test_was_notification_sent_builds_notification_log_query(self) -> None:
+        session = FakeAsyncSession()
+        repository = FootballDataSqlAlchemyRepository(session)
+
+        self.assertFalse(await repository.was_notification_sent("morning:2026-08-30:spain:123"))
+
     async def test_save_league_page_data_persists_all_visible_rounds(self) -> None:
         session = FakeAsyncSession()
         repository = FootballDataSqlAlchemyRepository(session)

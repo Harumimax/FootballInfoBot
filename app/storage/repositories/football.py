@@ -31,6 +31,7 @@ from app.storage.models import (
     League,
     Match,
     MatchGoalEvent,
+    NotificationLog,
     ParserRun,
     Round,
     Season,
