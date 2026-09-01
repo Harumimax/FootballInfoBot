@@ -143,6 +143,40 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("27.08 22:00 Барселона - Атлетик", sender.sent_notifications[0].text)
         self.assertNotIn("Атлетико", sender.sent_notifications[0].text)
 
+    async def test_morning_push_sends_league_and_team_subscriptions_as_separate_messages(self) -> None:
+        rounds = (_sample_round(), _catch_up_round())
+        repository = FakePushRepository(
+            states=(
+                LeagueRoundState(
+                    league=LeagueView(code="spain", name="Испания"),
+                    round=rounds[0],
+                    rounds=rounds,
+                    has_match_today=True,
+                    all_today_matches_finished=False,
+                    has_changes_today=False,
+                ),
+            ),
+            subscribers_by_league={"spain": (SubscriberView(user_id=1, telegram_user_id=1001),)},
+            team_subscribers_by_league={
+                "spain": (TeamSubscriberView(user_id=1, telegram_user_id=1001, team_id=7, team_name="Барселона"),)
+            },
+        )
+        sender = FakePushSender()
+        service = PushNotificationService(repository=repository, sender=sender)
+
+        result = await service.send_morning_pushes(datetime(2026, 8, 27, 9, 0))
+
+        self.assertEqual(result.sent_count, 2)
+        self.assertEqual(
+            [notification.dedupe_key for notification in sender.sent_notifications],
+            [
+                "morning:2026-08-27:spain:1001",
+                "morning:2026-08-27:spain:team:7:1001",
+            ],
+        )
+        self.assertIn("Испания\n", sender.sent_notifications[0].text)
+        self.assertIn("Испания. Барселона", sender.sent_notifications[1].text)
+
     async def test_morning_push_skips_team_subscription_without_team_match_today(self) -> None:
         repository = FakePushRepository(
             states=(
@@ -257,6 +291,41 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.pending_leagues, ())
         self.assertEqual(sender.sent_notifications[0].kind, PushKind.AFTER_MATCHDAY)
         self.assertEqual(sender.sent_notifications[0].dedupe_key, "after_matchday:2026-08-27:spain:1001")
+
+    async def test_after_matchday_push_sends_league_and_team_subscriptions_as_separate_messages(self) -> None:
+        rounds = (_round_with_goal_events(), _catch_up_round())
+        repository = FakePushRepository(
+            states=(
+                LeagueRoundState(
+                    league=LeagueView(code="spain", name="Испания"),
+                    round=rounds[0],
+                    rounds=rounds,
+                    has_match_today=True,
+                    all_today_matches_finished=True,
+                    has_changes_today=True,
+                ),
+            ),
+            subscribers_by_league={"spain": (SubscriberView(user_id=1, telegram_user_id=1001),)},
+            team_subscribers_by_league={
+                "spain": (TeamSubscriberView(user_id=1, telegram_user_id=1001, team_id=7, team_name="Барселона"),)
+            },
+        )
+        sender = FakePushSender()
+        service = PushNotificationService(repository=repository, sender=sender)
+
+        result = await service.check_after_matchday_pushes(datetime(2026, 8, 27, 23, 0))
+
+        self.assertEqual(result.sent_count, 2)
+        self.assertEqual(
+            [notification.dedupe_key for notification in sender.sent_notifications],
+            [
+                "after_matchday:2026-08-27:spain:1001",
+                "after_matchday:2026-08-27:spain:team:7:1001",
+            ],
+        )
+        self.assertIn("Испания\n", sender.sent_notifications[0].text)
+        self.assertIn("Испания. Барселона", sender.sent_notifications[1].text)
+        self.assertIn("13 Таррега (АГ)", sender.sent_notifications[1].text)
 
     async def test_after_matchday_push_includes_today_matches_with_goal_events(self) -> None:
         rounds = (_round_with_goal_events(), _catch_up_round())

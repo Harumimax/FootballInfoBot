@@ -476,11 +476,6 @@ class FootballDataSqlAlchemyRepository:
         if league is None:
             return ()
 
-        league_subscriber_ids = select(Subscription.user_id).where(
-            Subscription.league_id == league.id,
-            Subscription.is_active.is_(True),
-            Subscription.notify_digest.is_(True),
-        )
         statement = (
             select(User.id, User.telegram_user_id, Team.id.label("team_id"), Team.display_name.label("team_name"))
             .join(TeamSubscription, TeamSubscription.user_id == User.id)
@@ -489,7 +484,6 @@ class FootballDataSqlAlchemyRepository:
                 TeamSubscription.league_id == league.id,
                 TeamSubscription.is_active.is_(True),
                 TeamSubscription.notify_digest.is_(True),
-                User.id.not_in(league_subscriber_ids),
             )
             .order_by(User.id, Team.display_name)
         )

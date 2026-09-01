@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime
 
 from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow
-from app.storage.models import MatchGoalEvent, Round, StandingRow
+from app.storage.models import League, MatchGoalEvent, Round, StandingRow
 from app.storage.repositories import FootballDataSqlAlchemyRepository
 
 
@@ -31,12 +31,43 @@ class FakeAsyncSession:
                 self._next_id += 1
 
 
+class FakeQuerySession:
+    def __init__(self, scalar_result: object | None = None) -> None:
+        self.scalar_result = scalar_result
+        self.executed_statements: list[object] = []
+
+    async def scalar(self, statement: object) -> object | None:
+        return self.scalar_result
+
+    async def execute(self, statement: object) -> tuple:
+        self.executed_statements.append(statement)
+        return ()
+
+
 class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
     async def test_was_notification_sent_builds_notification_log_query(self) -> None:
         session = FakeAsyncSession()
         repository = FootballDataSqlAlchemyRepository(session)
 
         self.assertFalse(await repository.was_notification_sent("morning:2026-08-30:spain:123"))
+
+    async def test_get_active_team_subscribers_does_not_exclude_league_subscribers(self) -> None:
+        session = FakeQuerySession(
+            scalar_result=League(
+                id=10,
+                source="kulichki",
+                code="spain",
+                name="Испания",
+                source_url="https://football.kulichki.net/spain/",
+            )
+        )
+        repository = FootballDataSqlAlchemyRepository(session)
+
+        subscribers = await repository.get_active_team_subscribers_for_league("spain")
+
+        self.assertEqual(subscribers, ())
+        self.assertEqual(len(session.executed_statements), 1)
+        self.assertNotIn("NOT IN", str(session.executed_statements[0]).upper())
 
     async def test_save_league_page_data_persists_all_visible_rounds(self) -> None:
         session = FakeAsyncSession()
