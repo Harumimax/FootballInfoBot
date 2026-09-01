@@ -61,6 +61,9 @@ class StorageModelsTest(unittest.TestCase):
     def test_match_goal_event_has_match_position_identity(self) -> None:
         self.assertTrue(_has_unique_constraint(MatchGoalEvent, "match_id", "position"))
 
+    def test_match_goal_event_marks_own_goals(self) -> None:
+        self.assertIn("is_own_goal", MatchGoalEvent.__table__.columns)
+
     def test_initial_migration_seeds_mvp_leagues(self) -> None:
         migration = PROJECT_ROOT / "migrations" / "versions" / "202608270001_initial_schema.py"
         migration_text = migration.read_text(encoding="utf-8")
@@ -113,6 +116,13 @@ class StorageModelsTest(unittest.TestCase):
         self.assertIn("germany", migration_text)
         self.assertIn("italy", migration_text)
         self.assertIn("france", migration_text)
+
+    def test_goal_event_own_goal_migration_adds_flag(self) -> None:
+        migration = PROJECT_ROOT / "migrations" / "versions" / "202609010001_add_goal_event_own_goal_flag.py"
+        migration_text = migration.read_text(encoding="utf-8")
+
+        self.assertIn("is_own_goal", migration_text)
+        self.assertIn("match_goal_events", migration_text)
 
 
 def _has_unique_constraint(model: type[object], *column_names: str) -> bool:

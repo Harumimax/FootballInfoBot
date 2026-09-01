@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from app.parser.dto import ParsedMatch, ParsedRound, ParsedStandingRow
+from app.parser.dto import ParsedGoalEvent, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.services.subscriptions.dto import LeagueView, StandingTableView, TeamSubscriptionView
 
 
@@ -173,8 +173,13 @@ def _format_match(match: ParsedMatch) -> str:
 def _format_match_lines(match: ParsedMatch, *, include_goal_events: bool) -> list[str]:
     lines = [_format_match(match)]
     if include_goal_events:
-        lines.extend(f"{event.minute} {event.scorer_name}" for event in match.goal_events)
+        lines.extend(_format_goal_event(event) for event in match.goal_events)
     return lines
+
+
+def _format_goal_event(event: ParsedGoalEvent) -> str:
+    suffix = " (АГ)" if event.is_own_goal else ""
+    return f"{event.minute} {event.scorer_name}{suffix}"
 
 
 def _format_match_datetime(value: datetime | None) -> str:

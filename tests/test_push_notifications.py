@@ -283,7 +283,8 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
             render_matchday_rounds_state("Испания", rounds, datetime(2026, 8, 27).date()),
         )
         self.assertIn("Матчи сегодня:", sender.sent_notifications[0].text)
-        self.assertIn("27.08 22:00 Барселона 2:0 Атлетик", sender.sent_notifications[0].text)
+        self.assertIn("27.08 22:00 Барселона 3:0 Атлетик", sender.sent_notifications[0].text)
+        self.assertIn("13 Таррега (АГ)", sender.sent_notifications[0].text)
         self.assertIn("37 Рафинья", sender.sent_notifications[0].text)
         self.assertIn("82 Фермин Лопес", sender.sent_notifications[0].text)
 
@@ -411,12 +412,19 @@ def _round_with_goal_events() -> ParsedRound:
                 home_team="Барселона",
                 away_team="Атлетик",
                 scheduled_at=datetime(2026, 8, 27, 22, 0),
-                home_score=2,
+                home_score=3,
                 away_score=0,
                 status="finished",
                 goal_events=(
-                    ParsedGoalEvent(minute="37", scorer_name="Рафинья", score_after="1:0", position=1),
-                    ParsedGoalEvent(minute="82", scorer_name="Фермин Лопес", score_after="2:0", position=2),
+                    ParsedGoalEvent(
+                        minute="13",
+                        scorer_name="Таррега",
+                        score_after="1:0",
+                        position=1,
+                        is_own_goal=True,
+                    ),
+                    ParsedGoalEvent(minute="37", scorer_name="Рафинья", score_after="2:0", position=2),
+                    ParsedGoalEvent(minute="82", scorer_name="Фермин Лопес", score_after="3:0", position=3),
                 ),
                 goal_events_loaded=True,
             ),

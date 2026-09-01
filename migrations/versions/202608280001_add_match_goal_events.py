@@ -26,6 +26,7 @@ def upgrade() -> None:
         sa.Column("minute", sa.String(length=16), nullable=False),
         sa.Column("scorer_name", sa.String(length=255), nullable=False),
         sa.Column("score_after", sa.String(length=16), nullable=True),
+        sa.Column("is_own_goal", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),

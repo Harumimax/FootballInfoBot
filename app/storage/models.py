@@ -139,6 +139,7 @@ class MatchGoalEvent(TimestampMixin, Base):
     minute: Mapped[str] = mapped_column(String(16), nullable=False)
     scorer_name: Mapped[str] = mapped_column(String(255), nullable=False)
     score_after: Mapped[str | None] = mapped_column(String(16))
+    is_own_goal: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     match: Mapped[Match] = relationship(back_populates="goal_events")
 

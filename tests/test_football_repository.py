@@ -156,13 +156,20 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
                         home_team="Барселона",
                         away_team="Атлетик",
                         scheduled_at=datetime(2026, 8, 27, 22, 0),
-                        home_score=2,
+                        home_score=3,
                         away_score=0,
                         status="finished",
                         source_url="https://football.kulichki.net/spain/2027/1/3-Barselona-Atletik-obzor-matcha-spain-2027.htm",
                         goal_events=(
-                            ParsedGoalEvent(minute="37", scorer_name="Рафинья", score_after="1:0", position=1),
-                            ParsedGoalEvent(minute="82", scorer_name="Фермин Лопес", score_after="2:0", position=2),
+                            ParsedGoalEvent(
+                                minute="13",
+                                scorer_name="Таррега",
+                                score_after="1:0",
+                                position=1,
+                                is_own_goal=True,
+                            ),
+                            ParsedGoalEvent(minute="37", scorer_name="Рафинья", score_after="2:0", position=2),
+                            ParsedGoalEvent(minute="82", scorer_name="Фермин Лопес", score_after="3:0", position=3),
                         ),
                         goal_events_loaded=True,
                     ),
@@ -174,12 +181,16 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         await repository.save_league_page_data(data)
 
         added_goal_events = [entity for entity in session.added if isinstance(entity, MatchGoalEvent)]
-        self.assertEqual(len(added_goal_events), 2)
-        self.assertEqual(added_goal_events[0].minute, "37")
-        self.assertEqual(added_goal_events[0].scorer_name, "Рафинья")
+        self.assertEqual(len(added_goal_events), 3)
+        self.assertEqual(added_goal_events[0].minute, "13")
+        self.assertEqual(added_goal_events[0].scorer_name, "Таррега")
         self.assertEqual(added_goal_events[0].score_after, "1:0")
-        self.assertEqual(added_goal_events[1].minute, "82")
-        self.assertEqual(added_goal_events[1].scorer_name, "Фермин Лопес")
+        self.assertTrue(added_goal_events[0].is_own_goal)
+        self.assertEqual(added_goal_events[1].minute, "37")
+        self.assertEqual(added_goal_events[1].scorer_name, "Рафинья")
+        self.assertFalse(added_goal_events[1].is_own_goal)
+        self.assertEqual(added_goal_events[2].minute, "82")
+        self.assertEqual(added_goal_events[2].scorer_name, "Фермин Лопес")
 
 
 if __name__ == "__main__":

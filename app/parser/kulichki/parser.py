@@ -15,7 +15,10 @@ SEASON_RE = re.compile(r"(?P<start>\d{4})\s*/\s*(?P<end>\d{4})")
 SCORE_RE = re.compile(r"(?P<home>\d+)\s*[:\-]\s*(?P<away>\d+)")
 TIME_RE = re.compile(r"(?P<hour>\d{1,2})[:\-](?P<minute>\d{2})")
 GOAL_EVENT_RE = re.compile(
-    r"(?P<scorer>[А-ЯЁA-Z][^.,\n]+?)\s*,\s*(?P<minute>\d{1,3}(?:\+\d{1,2})?)\s*\((?P<score>\d+\s*[:\-]\s*\d+)\)",
+    r"(?P<scorer>[А-ЯЁA-Z][^.,\n]+?)\s*,\s*"
+    r"(?P<minute>\d{1,3}(?:\+\d{1,2})?)"
+    r"(?P<own_goal>\s*-\s*в\s+свои\s+ворота)?"
+    r"\s*\((?P<score>\d+\s*[:\-]\s*\d+)\)",
     re.IGNORECASE,
 )
 DATE_TIME_RE = re.compile(
@@ -585,6 +588,7 @@ def _parse_goal_events_line(line: str) -> list[ParsedGoalEvent]:
                 scorer_name=_clean_team_name(match.group("scorer")),
                 score_after=match.group("score").replace("-", ":").replace(" ", ""),
                 position=position,
+                is_own_goal=bool(match.group("own_goal")),
             )
         )
     return events

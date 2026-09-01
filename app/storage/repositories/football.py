@@ -666,6 +666,7 @@ class FootballDataSqlAlchemyRepository:
                     minute=goal_event.minute,
                     scorer_name=goal_event.scorer_name,
                     score_after=goal_event.score_after,
+                    is_own_goal=goal_event.is_own_goal,
                 )
             )
         await self._session.flush()
@@ -898,6 +899,7 @@ class FootballDataSqlAlchemyRepository:
                 scorer_name=event.scorer_name,
                 score_after=event.score_after,
                 position=event.position,
+                is_own_goal=event.is_own_goal,
             )
             for event in result
         )

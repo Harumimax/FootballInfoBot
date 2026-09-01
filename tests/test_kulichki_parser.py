@@ -193,6 +193,35 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(goals[1].scorer_name, "Фермин Лопес")
         self.assertEqual(goals[1].score_after, "2:0")
 
+    def test_parse_match_page_extracts_own_goals_from_review(self) -> None:
+        html = """
+        <html><body>
+        <p>Депортиво - Валенсия 3:1</p>
+        <p>
+        Таррега, 13 - в свои ворота (1:0).
+        Обамеянг, 17 (2:0).
+        Садик, 26 (2:1).
+        Диакаби, 59 - в свои ворота (3:1).
+        </p>
+        </body></html>
+        """
+
+        goals = self.parser.parse_match_page(
+            html,
+            url="https://football.kulichki.net/spain/2027/3/3-Deportivo-Valensija-obzor-matcha-spain-2027.htm",
+        )
+
+        self.assertEqual(len(goals), 4)
+        self.assertEqual(
+            [(goal.minute, goal.scorer_name, goal.score_after, goal.is_own_goal) for goal in goals],
+            [
+                ("13", "Таррега", "1:0", True),
+                ("17", "Обамеянг", "2:0", False),
+                ("26", "Садик", "2:1", False),
+                ("59", "Диакаби", "3:1", True),
+            ],
+        )
+
 
 def _read_fixture(name: str) -> str:
     return (FIXTURES_DIR / name).read_text(encoding="utf-8")

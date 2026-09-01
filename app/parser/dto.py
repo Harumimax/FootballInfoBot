@@ -17,6 +17,7 @@ class ParsedGoalEvent:
     scorer_name: str
     score_after: str | None = None
     position: int = 0
+    is_own_goal: bool = False
 
 
 @dataclass(frozen=True)
