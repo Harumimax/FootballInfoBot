@@ -84,7 +84,7 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sender.sent_notifications[0].telegram_user_id, 1001)
         self.assertEqual(sender.sent_notifications[0].dedupe_key, "morning:2026-08-27:spain:1001")
         self.assertIn("21.08 20:00 Реал - Барселона", sender.sent_notifications[0].text)
-        self.assertIn("22.08 21:00 Атлетико 2:1 Вильярреал", sender.sent_notifications[0].text)
+        self.assertIn("22.08 21:00 Атлетико <b>2:1</b> Вильярреал", sender.sent_notifications[0].text)
 
     async def test_morning_push_can_include_catch_up_rounds_in_one_league_message(self) -> None:
         repository = FakePushRepository(
@@ -110,7 +110,7 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
             sender.sent_notifications[0].text,
             render_matchday_rounds_state("Испания", (_sample_round(), _catch_up_round()), datetime(2026, 8, 27).date()),
         )
-        self.assertIn("Матчи сегодня:", sender.sent_notifications[0].text)
+        self.assertIn("📅 <b>Матчи сегодня</b>", sender.sent_notifications[0].text)
         self.assertIn("3-й тур", sender.sent_notifications[0].text)
         self.assertIn("1-й тур", sender.sent_notifications[0].text)
 
@@ -139,7 +139,8 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.sent_count, 1)
         self.assertEqual(sender.sent_notifications[0].dedupe_key, "morning:2026-08-27:spain:team:7:2002")
-        self.assertIn("Испания. Барселона", sender.sent_notifications[0].text)
+        self.assertIn("⭐ <b>Барселона</b>", sender.sent_notifications[0].text)
+        self.assertIn("🇪🇸 Испания", sender.sent_notifications[0].text)
         self.assertIn("27.08 22:00 Барселона - Атлетик", sender.sent_notifications[0].text)
         self.assertNotIn("Атлетико", sender.sent_notifications[0].text)
 
@@ -174,8 +175,9 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
                 "morning:2026-08-27:spain:team:7:1001",
             ],
         )
-        self.assertIn("Испания\n", sender.sent_notifications[0].text)
-        self.assertIn("Испания. Барселона", sender.sent_notifications[1].text)
+        self.assertIn("🇪🇸 <b>Испания</b>", sender.sent_notifications[0].text)
+        self.assertIn("⭐ <b>Барселона</b>", sender.sent_notifications[1].text)
+        self.assertIn("🇪🇸 Испания", sender.sent_notifications[1].text)
 
     async def test_morning_push_skips_team_subscription_without_team_match_today(self) -> None:
         repository = FakePushRepository(
@@ -323,8 +325,9 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
                 "after_matchday:2026-08-27:spain:team:7:1001",
             ],
         )
-        self.assertIn("Испания\n", sender.sent_notifications[0].text)
-        self.assertIn("Испания. Барселона", sender.sent_notifications[1].text)
+        self.assertIn("🇪🇸 <b>Испания</b>", sender.sent_notifications[0].text)
+        self.assertIn("⭐ <b>Барселона</b>", sender.sent_notifications[1].text)
+        self.assertIn("🇪🇸 Испания", sender.sent_notifications[1].text)
         self.assertIn("13 Таррега (АГ)", sender.sent_notifications[1].text)
 
     async def test_after_matchday_push_includes_today_matches_with_goal_events(self) -> None:
@@ -351,8 +354,8 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
             sender.sent_notifications[0].text,
             render_matchday_rounds_state("Испания", rounds, datetime(2026, 8, 27).date()),
         )
-        self.assertIn("Матчи сегодня:", sender.sent_notifications[0].text)
-        self.assertIn("27.08 22:00 Барселона 3:0 Атлетик", sender.sent_notifications[0].text)
+        self.assertIn("📅 <b>Матчи сегодня</b>", sender.sent_notifications[0].text)
+        self.assertIn("27.08 22:00 Барселона <b>3:0</b> Атлетик", sender.sent_notifications[0].text)
         self.assertIn("13 Таррега (АГ)", sender.sent_notifications[0].text)
         self.assertIn("37 Рафинья", sender.sent_notifications[0].text)
         self.assertIn("82 Фермин Лопес", sender.sent_notifications[0].text)

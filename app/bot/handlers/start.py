@@ -34,6 +34,7 @@ from app.bot.keyboards import (
 from app.bot.messages import (
     MVP_LEAGUES,
     NO_DATA_MESSAGE,
+    USER_MESSAGE_PARSE_MODE,
     render_empty_subscriptions_message,
     render_group_not_supported_message,
     render_help_message,
@@ -66,17 +67,22 @@ async def handle_private_start(
     await message.answer(
         render_start_message(),
         reply_markup=build_main_menu_keyboard(is_admin=_is_admin(message, admin_user_ids)),
+        parse_mode=USER_MESSAGE_PARSE_MODE,
     )
 
 
 async def handle_private_help(message: Message) -> None:
-    await message.answer(render_help_message())
+    await message.answer(render_help_message(), parse_mode=USER_MESSAGE_PARSE_MODE)
 
 
 async def handle_my_subscriptions(message: Message, football_user_service: FootballUserService | None = None) -> None:
     telegram_user_id = _telegram_user_id(message)
     if football_user_service is None or telegram_user_id is None:
-        await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_type_keyboard())
+        await message.answer(
+            render_empty_subscriptions_message(),
+            reply_markup=build_subscription_type_keyboard(),
+            parse_mode=USER_MESSAGE_PARSE_MODE,
+        )
         return
 
     subscriptions = await football_user_service.get_subscriptions(telegram_user_id)
@@ -88,14 +94,23 @@ async def handle_my_subscriptions(message: Message, football_user_service: Footb
                 leagues=subscriptions,
                 team_subscriptions=team_subscriptions,
             ),
+            parse_mode=USER_MESSAGE_PARSE_MODE,
         )
         return
 
-    await message.answer(render_empty_subscriptions_message(), reply_markup=build_subscription_type_keyboard())
+    await message.answer(
+        render_empty_subscriptions_message(),
+        reply_markup=build_subscription_type_keyboard(),
+        parse_mode=USER_MESSAGE_PARSE_MODE,
+    )
 
 
 async def handle_subscribe_menu(message: Message, football_user_service: FootballUserService | None = None) -> None:
-    await message.answer(render_select_subscription_message(), reply_markup=build_subscription_type_keyboard())
+    await message.answer(
+        render_select_subscription_message(),
+        reply_markup=build_subscription_type_keyboard(),
+        parse_mode=USER_MESSAGE_PARSE_MODE,
+    )
 
 
 async def handle_subscription_league_menu(
@@ -112,6 +127,7 @@ async def handle_subscription_league_menu(
         await callback.message.answer(
             render_select_league_subscription_message(),
             reply_markup=build_subscription_keyboard(subscribed_league_codes=subscribed_codes),
+            parse_mode=USER_MESSAGE_PARSE_MODE,
         )
 
 
@@ -121,6 +137,7 @@ async def handle_team_subscription_league_menu(callback: CallbackQuery) -> None:
         await callback.message.answer(
             render_select_team_league_message(),
             reply_markup=build_team_subscription_league_keyboard(),
+            parse_mode=USER_MESSAGE_PARSE_MODE,
         )
 
 
@@ -133,13 +150,13 @@ async def handle_team_subscription_league_selected(
     telegram_user_id = _callback_user_id(callback)
     if football_user_service is None or telegram_user_id is None or not league_code:
         if callback.message is not None:
-            await callback.message.answer(NO_DATA_MESSAGE)
+            await callback.message.answer(NO_DATA_MESSAGE, parse_mode=USER_MESSAGE_PARSE_MODE)
         return
 
     teams = await football_user_service.get_league_teams(league_code)
     if not teams:
         if callback.message is not None:
-            await callback.message.answer(NO_DATA_MESSAGE)
+            await callback.message.answer(NO_DATA_MESSAGE, parse_mode=USER_MESSAGE_PARSE_MODE)
         return
 
     subscribed_team_ids = await football_user_service.get_team_subscription_ids(telegram_user_id, league_code)
@@ -151,6 +168,7 @@ async def handle_team_subscription_league_selected(
                 league_code=league_code,
                 subscribed_team_ids=subscribed_team_ids,
             ),
+            parse_mode=USER_MESSAGE_PARSE_MODE,
         )
 
 
@@ -163,7 +181,7 @@ async def handle_team_subscription_toggle(
     telegram_user_id = _callback_user_id(callback)
     if football_user_service is None or telegram_user_id is None or not league_code or team_id is None:
         if callback.message is not None:
-            await callback.message.answer(NO_DATA_MESSAGE)
+            await callback.message.answer(NO_DATA_MESSAGE, parse_mode=USER_MESSAGE_PARSE_MODE)
         return
 
     try:
@@ -174,7 +192,7 @@ async def handle_team_subscription_toggle(
         )
     except ValueError:
         if callback.message is not None:
-            await callback.message.answer(NO_DATA_MESSAGE)
+            await callback.message.answer(NO_DATA_MESSAGE, parse_mode=USER_MESSAGE_PARSE_MODE)
         return
 
     if callback.message is not None:
@@ -183,16 +201,25 @@ async def handle_team_subscription_toggle(
                 result.team.name,
                 result.league.name,
                 is_active=result.is_active,
-            )
+            ),
+            parse_mode=USER_MESSAGE_PARSE_MODE,
         )
 
 
 async def handle_standings_menu(message: Message) -> None:
-    await message.answer(render_select_league_for_table_message(), reply_markup=build_table_league_keyboard())
+    await message.answer(
+        render_select_league_for_table_message(),
+        reply_markup=build_table_league_keyboard(),
+        parse_mode=USER_MESSAGE_PARSE_MODE,
+    )
 
 
 async def handle_current_round_menu(message: Message) -> None:
-    await message.answer(render_select_league_for_round_message(), reply_markup=build_current_round_league_keyboard())
+    await message.answer(
+        render_select_league_for_round_message(),
+        reply_markup=build_current_round_league_keyboard(),
+        parse_mode=USER_MESSAGE_PARSE_MODE,
+    )
 
 
 async def handle_subscription_toggle(
@@ -205,7 +232,7 @@ async def handle_subscription_toggle(
     if football_user_service is None or telegram_user_id is None or not league_code:
         await callback.answer()
         if callback.message is not None:
-            await callback.message.answer(NO_DATA_MESSAGE)
+            await callback.message.answer(NO_DATA_MESSAGE, parse_mode=USER_MESSAGE_PARSE_MODE)
         return
 
     try:
@@ -216,7 +243,7 @@ async def handle_subscription_toggle(
     except ValueError:
         await callback.answer()
         if callback.message is not None:
-            await callback.message.answer(NO_DATA_MESSAGE)
+            await callback.message.answer(NO_DATA_MESSAGE, parse_mode=USER_MESSAGE_PARSE_MODE)
         return
 
     await callback.answer()
@@ -227,9 +254,12 @@ async def handle_subscription_toggle(
                 if result.current_rounds
                 else render_round_state(result.league.name, result.current_round)
             )
-            await callback.message.answer(text)
+            await callback.message.answer(text, parse_mode=USER_MESSAGE_PARSE_MODE)
         else:
-            await callback.message.answer(render_unsubscribed_message(_league_name_for_unsubscribe(result.league.code, result.league.name)))
+            await callback.message.answer(
+                render_unsubscribed_message(_league_name_for_unsubscribe(result.league.code, result.league.name)),
+                parse_mode=USER_MESSAGE_PARSE_MODE,
+            )
 
 
 async def handle_table_selected(callback: CallbackQuery, football_user_service: FootballUserService | None = None) -> None:
@@ -240,7 +270,7 @@ async def handle_table_selected(callback: CallbackQuery, football_user_service: 
         table = await football_user_service.get_latest_standings(league_code)
 
     if callback.message is not None:
-        await callback.message.answer(render_standings(table))
+        await callback.message.answer(render_standings(table), parse_mode=USER_MESSAGE_PARSE_MODE)
 
 
 async def handle_current_round_selected(
@@ -255,7 +285,7 @@ async def handle_current_round_selected(
 
     if callback.message is not None:
         if round_view is None:
-            await callback.message.answer(NO_DATA_MESSAGE)
+            await callback.message.answer(NO_DATA_MESSAGE, parse_mode=USER_MESSAGE_PARSE_MODE)
         else:
             match_date = datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).date()
             text = (
@@ -263,11 +293,11 @@ async def handle_current_round_selected(
                 if round_view.rounds
                 else render_round_state(round_view.league.name, round_view.round)
             )
-            await callback.message.answer(text)
+            await callback.message.answer(text, parse_mode=USER_MESSAGE_PARSE_MODE)
 
 
 async def handle_group_message(message: Message) -> None:
-    await message.answer(render_group_not_supported_message())
+    await message.answer(render_group_not_supported_message(), parse_mode=USER_MESSAGE_PARSE_MODE)
 
 
 def create_start_router() -> Router:

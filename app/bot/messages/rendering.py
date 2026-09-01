@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from html import escape
 
 from app.parser.dto import ParsedGoalEvent, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.services.subscriptions.dto import LeagueView, StandingTableView, TeamSubscriptionView
 
 
-NO_DATA_MESSAGE = "Данных пока нет."
+USER_MESSAGE_PARSE_MODE = "HTML"
+NO_DATA_MESSAGE = "⏳ <b>Данных пока нет</b>\n\nПопробуйте чуть позже."
+
+LEAGUE_FLAGS = {
+    "Англия": "🇬🇧",
+    "Испания": "🇪🇸",
+    "Германия": "🇩🇪",
+    "Италия": "🇮🇹",
+    "Франция": "🇫🇷",
+}
 
 
 MVP_LEAGUES: tuple[LeagueView, ...] = (
@@ -20,24 +30,29 @@ MVP_LEAGUES: tuple[LeagueView, ...] = (
 
 def render_start_message() -> str:
     return (
-        "FootballInfoBot присылает футбольные обновления по подписке.\n\n"
-        "Сейчас можно подписаться на Англию, Испанию, Германию, Италию, Францию или команду из этих лиг, посмотреть таблицу и текущий тур."
+        "⚽ <b>FootballInfoBot</b>\n\n"
+        "Я слежу за футбольными лигами и командами:\n"
+        "• матчи тура\n"
+        "• матчи любимых команд\n"
+        "• результаты после игрового дня\n"
+        "• турнирные таблицы\n\n"
+        "Можно подписаться на Англию, Испанию, Германию, Италию, Францию или любимую команду.\n\n"
+        "Доступны: 🇬🇧 Англия, 🇪🇸 Испания, 🇩🇪 Германия, 🇮🇹 Италия, 🇫🇷 Франция.\n\n"
+        "Выберите, что хотите получать."
     )
 
 
 def render_help_message() -> str:
     return (
-        "FootballInfoBot присылает футбольные обновления по подписке.\n\n"
+        "⚽ <b>FootballInfoBot</b>\n\n"
         "Что можно сделать:\n"
-        "- подписаться на Англию, Испанию, Германию, Италию или Францию;\n"
-        "- подписаться на команду из этих лиг;\n"
-        "- посмотреть свои подписки;\n"
-        "- запросить турнирную таблицу;\n"
-        "- запросить текущий тур.\n\n"
-        "Автоуведомления приходят только в дни матчей:\n"
-        "- утром около 09:00;\n"
-        "- после завершения матчей дня.\n\n"
-        f"Если данных нет, бот напишет: {NO_DATA_MESSAGE}\n\n"
+        "• подписаться на лигу, турнир или команду\n"
+        "• посмотреть свои подписки\n"
+        "• запросить турнирную таблицу\n"
+        "• запросить текущий тур\n\n"
+        "🔔 Автоуведомления приходят только в дни матчей:\n"
+        "• утром около 09:00\n"
+        "• после завершения матчей дня\n\n"
         "Источник данных: football.kulichki.net.\n"
         "Бот не является официальным сервисом football.kulichki.net."
     )
@@ -45,13 +60,14 @@ def render_help_message() -> str:
 
 def render_group_not_supported_message() -> str:
     return (
-        "Я работаю с личными подписками. Напишите мне в личный чат, чтобы выбрать подписки.\n\n"
+        "💬 Я работаю с личными подписками.\n\n"
+        "Напишите мне в личный чат, чтобы выбрать лиги и команды.\n"
         "Функционал для групповых чатов может появиться позже."
     )
 
 
 def render_empty_subscriptions_message() -> str:
-    return "У вас пока нет подписок."
+    return "🔕 <b>У вас пока нет подписок</b>\n\nМожно подписаться на лигу, турнир или команду."
 
 
 def render_subscriptions_message(
@@ -61,48 +77,61 @@ def render_subscriptions_message(
     if not leagues and not team_subscriptions:
         return render_empty_subscriptions_message()
 
-    return "Ваши подписки:\n\nНажмите на подписку, чтобы отписаться."
+    lines = ["🔔 <b>Ваши подписки</b>", ""]
+    if leagues:
+        lines.append("🏆 <b>Лиги и турниры:</b>")
+        lines.extend(f"✅ {_format_league_name(league.name)}" for league in leagues)
+        lines.append("")
+    if team_subscriptions:
+        lines.append("⭐ <b>Команды:</b>")
+        lines.extend(
+            f"✅ {escape(subscription.team.name)} ({_format_league_name(subscription.league.name)})"
+            for subscription in team_subscriptions
+        )
+        lines.append("")
+    lines.append("Нажмите на подписку, чтобы отключить её.")
+    return "\n".join(lines)
 
 
 def render_unsubscribed_message(league_name: str) -> str:
-    return f"Вы отписались от {league_name}."
+    return f"🔕 Вы отписались от {escape(league_name)}."
 
 
 def render_team_subscription_changed_message(team_name: str, league_name: str, *, is_active: bool) -> str:
     if is_active:
-        return f"Вы подписались на {team_name} ({league_name})."
-    return f"Вы отписались от {team_name} ({league_name})."
+        return f"✅ Вы подписались на {escape(team_name)} ({_format_league_name(league_name)})."
+    return f"🔕 Вы отписались от {escape(team_name)} ({_format_league_name(league_name)})."
 
 
 def render_select_subscription_message() -> str:
-    return "Что хотите выбрать для подписки?"
+    return "🎯 <b>Что хотите выбрать для подписки?</b>"
 
 
 def render_select_league_subscription_message() -> str:
-    return "Выберите лигу или турнир для подписки."
+    return "🏆 <b>Выберите лигу или турнир для подписки</b>"
 
 
 def render_select_team_league_message() -> str:
-    return "Выберите лигу, чтобы посмотреть команды."
+    return "⭐ <b>Выберите лигу, чтобы посмотреть команды</b>"
 
 
 def render_select_team_message(league_name: str) -> str:
-    return f"Выберите команду из лиги: {league_name}."
+    return f"⭐ <b>Выберите команду</b>\n\nЛига: {_format_league_name(league_name)}"
 
 
 def render_select_league_for_table_message() -> str:
-    return "Выберите лигу, чтобы посмотреть турнирную таблицу."
+    return "📊 <b>Выберите лигу, чтобы посмотреть турнирную таблицу</b>"
 
 
 def render_select_league_for_round_message() -> str:
-    return "Выберите лигу, чтобы посмотреть текущий тур."
+    return "🏟️ <b>Выберите лигу, чтобы посмотреть текущий тур</b>"
 
 
 def render_round_state(league_name: str, round_: ParsedRound | None) -> str:
     if round_ is None or not round_.matches:
         return NO_DATA_MESSAGE
 
-    lines = [f"{league_name}, {round_.number}-й тур", ""]
+    lines = [_format_league_title(league_name), f"🏆 <b>{round_.number}-й тур</b>", ""]
     lines.extend(_format_match(match) for match in round_.matches)
     return "\n".join(lines)
 
@@ -115,9 +144,9 @@ def render_rounds_state(league_name: str, rounds: tuple[ParsedRound, ...]) -> st
     if len(visible_rounds) == 1:
         return render_round_state(league_name, visible_rounds[0])
 
-    lines = [league_name]
-    for round_ in visible_rounds:
-        lines.extend(("", f"{round_.number}-й тур"))
+    lines = [_format_league_title(league_name)]
+    for index, round_ in enumerate(visible_rounds):
+        lines.extend(("", _format_round_title(round_.number, is_primary=index == 0)))
         lines.extend(_format_match(match) for match in round_.matches)
     return "\n".join(lines)
 
@@ -137,12 +166,13 @@ def render_matchday_rounds_state(league_name: str, rounds: tuple[ParsedRound, ..
     if not today_matches:
         return render_rounds_state(league_name, visible_rounds)
 
-    lines = [league_name, "", "Матчи сегодня:"]
+    header_lines = _format_matchday_header(league_name)
+    lines = [*header_lines, "", "📅 <b>Матчи сегодня</b>"]
     for match in today_matches:
         lines.extend(_format_match_lines(match, include_goal_events=True))
 
-    for round_ in visible_rounds:
-        lines.extend(("", f"{round_.number}-й тур"))
+    for index, round_ in enumerate(visible_rounds):
+        lines.extend(("", _format_round_title(round_.number, is_primary=index == 0)))
         lines.extend(_format_match(match) for match in round_.matches)
     return "\n".join(lines)
 
@@ -151,7 +181,7 @@ def render_standings(table: StandingTableView | None) -> str:
     if table is None or not table.rows:
         return NO_DATA_MESSAGE
 
-    lines = [f"{table.league.name}. Турнирная таблица", ""]
+    lines = [f"📊 {_format_league_name(table.league.name)}. <b>Турнирная таблица</b>", ""]
     lines.extend(_format_standing_row(row) for row in table.rows)
     return "\n".join(lines)
 
@@ -159,15 +189,15 @@ def render_standings(table: StandingTableView | None) -> str:
 def _format_standing_row(row: ParsedStandingRow) -> str:
     played = row.played if row.played is not None else "-"
     points = row.points if row.points is not None else "-"
-    return f"{row.position}. {row.team_name} - {played} игр, {points} очк."
+    return f"{row.position}. {escape(row.team_name)} — {played} игр, {points} очк."
 
 
 def _format_match(match: ParsedMatch) -> str:
     date_time = _format_match_datetime(match.scheduled_at)
     if match.home_score is None or match.away_score is None:
-        return f"{date_time} {match.home_team} - {match.away_team}"
+        return f"{date_time} {escape(match.home_team)} - {escape(match.away_team)}"
 
-    return f"{date_time} {match.home_team} {match.home_score}:{match.away_score} {match.away_team}"
+    return f"{date_time} {escape(match.home_team)} <b>{match.home_score}:{match.away_score}</b> {escape(match.away_team)}"
 
 
 def _format_match_lines(match: ParsedMatch, *, include_goal_events: bool) -> list[str]:
@@ -179,10 +209,42 @@ def _format_match_lines(match: ParsedMatch, *, include_goal_events: bool) -> lis
 
 def _format_goal_event(event: ParsedGoalEvent) -> str:
     suffix = " (АГ)" if event.is_own_goal else ""
-    return f"{event.minute} {event.scorer_name}{suffix}"
+    return f"  ⚽ {escape(event.minute)} {escape(event.scorer_name)}{suffix}"
 
 
 def _format_match_datetime(value: datetime | None) -> str:
     if value is None:
         return "--.-- --:--"
     return value.strftime("%d.%m %H:%M")
+
+
+def _format_league_title(league_name: str) -> str:
+    return f"{_league_flag(league_name)} <b>{escape(league_name)}</b>"
+
+
+def _format_league_name(league_name: str) -> str:
+    return f"{_league_flag(league_name)} {escape(league_name)}"
+
+
+def _format_round_title(round_number: int, *, is_primary: bool) -> str:
+    icon = "🏆" if is_primary else "↩️"
+    return f"{icon} <b>{round_number}-й тур</b>"
+
+
+def _format_matchday_header(league_name: str) -> list[str]:
+    league, team = _split_team_league_title(league_name)
+    if team is None:
+        return [_format_league_title(league)]
+    return [f"⭐ <b>{escape(team)}</b>", _format_league_name(league)]
+
+
+def _split_team_league_title(value: str) -> tuple[str, str | None]:
+    if ". " not in value:
+        return value, None
+    league, team = value.split(". ", maxsplit=1)
+    return league, team
+
+
+def _league_flag(league_name: str) -> str:
+    league, _ = _split_team_league_title(league_name)
+    return LEAGUE_FLAGS.get(league, "🏳️")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from aiogram import Bot
 
+from app.bot.messages import USER_MESSAGE_PARSE_MODE
 from app.services.notifications.push import PushNotification
 
 
@@ -14,4 +15,5 @@ class TelegramPushSender:
             chat_id=notification.telegram_user_id,
             text=notification.text,
             disable_web_page_preview=True,
+            parse_mode=USER_MESSAGE_PARSE_MODE,
         )

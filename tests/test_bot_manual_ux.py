@@ -42,6 +42,8 @@ from app.bot.keyboards import (
 )
 from app.bot.messages import (
     NO_DATA_MESSAGE,
+    USER_MESSAGE_PARSE_MODE,
+    render_empty_subscriptions_message,
     render_group_not_supported_message,
     render_help_message,
     render_matchday_rounds_state,
@@ -52,7 +54,7 @@ from app.bot.messages import (
     render_subscriptions_message,
     render_unsubscribed_message,
 )
-from app.parser.dto import ParsedMatch, ParsedRound, ParsedStandingRow
+from app.parser.dto import ParsedGoalEvent, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.services.subscriptions.dto import (
     CurrentRoundView,
     LeagueView,
@@ -191,9 +193,10 @@ class BotManualUxTest(unittest.TestCase):
 
         self.assertEqual(
             render_round_state("Испания", round_),
-            "Испания, 3-й тур\n\n"
+            "🇪🇸 <b>Испания</b>\n"
+            "🏆 <b>3-й тур</b>\n\n"
             "21.08 20:00 Реал - Барселона\n"
-            "22.08 21:00 Атлетико 2:1 Вильярреал",
+            "22.08 21:00 Атлетико <b>2:1</b> Вильярреал",
         )
 
     def test_render_round_state_handles_missing_data(self) -> None:
@@ -221,13 +224,13 @@ class BotManualUxTest(unittest.TestCase):
 
         self.assertEqual(
             render_standings(table),
-            "Испания. Турнирная таблица\n\n"
-            "1. Реал Мадрид - 2 игр, 6 очк.\n"
-            "2. Барселона - 2 игр, 4 очк.",
+            "📊 🇪🇸 Испания. <b>Турнирная таблица</b>\n\n"
+            "1. Реал Мадрид — 2 игр, 6 очк.\n"
+            "2. Барселона — 2 игр, 4 очк.",
         )
 
     def test_subscription_messages_are_compact(self) -> None:
-        self.assertEqual(render_subscriptions_message(()), "У вас пока нет подписок.")
+        self.assertEqual(render_subscriptions_message(()), render_empty_subscriptions_message())
         self.assertEqual(
             render_subscriptions_message(
                 (LeagueView(code="spain", name="Испания"),),
@@ -238,9 +241,14 @@ class BotManualUxTest(unittest.TestCase):
                     ),
                 ),
             ),
-            "Ваши подписки:\n\nНажмите на подписку, чтобы отписаться.",
+            "🔔 <b>Ваши подписки</b>\n\n"
+            "🏆 <b>Лиги и турниры:</b>\n"
+            "✅ 🇪🇸 Испания\n\n"
+            "⭐ <b>Команды:</b>\n"
+            "✅ Арсенал (🇬🇧 Англия)\n\n"
+            "Нажмите на подписку, чтобы отключить её.",
         )
-        self.assertEqual(render_unsubscribed_message("Англии"), "Вы отписались от Англии.")
+        self.assertEqual(render_unsubscribed_message("Англии"), "🔕 Вы отписались от Англии.")
 
     def test_dispatcher_registers_router_with_admin_context(self) -> None:
         dispatcher = create_dispatcher(admin_user_ids=frozenset({123}))
@@ -275,8 +283,9 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             message.answers[0].text,
-            "Ваши подписки:\n\nНажмите на подписку, чтобы отписаться.",
+            render_subscriptions_message(service.subscriptions, service.team_subscriptions),
         )
+        self.assertEqual(message.answers[0].parse_mode, USER_MESSAGE_PARSE_MODE)
         keyboard = message.answers[0].reply_markup
         self.assertEqual(keyboard.inline_keyboard[0][0].text, "✓ Англия")
         self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓ Барселона (Испания)")
@@ -337,7 +346,8 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
         await handle_team_subscription_toggle(callback, football_user_service=service)
 
         self.assertEqual(service.toggled_teams, [(123, "spain", 5)])
-        self.assertEqual(callback.message.answers[0].text, "Вы подписались на Барселона (Испания).")
+        self.assertEqual(callback.message.answers[0].text, "✅ Вы подписались на Барселона (🇪🇸 Испания).")
+        self.assertEqual(callback.message.answers[0].parse_mode, USER_MESSAGE_PARSE_MODE)
 
     async def test_subscription_toggle_sends_current_round_when_enabled(self) -> None:
         round_ = _sample_round()
@@ -387,7 +397,7 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
 
         await handle_subscription_toggle(callback, football_user_service=service)
 
-        self.assertEqual(callback.message.answers[0].text, "Вы отписались от Англии.")
+        self.assertEqual(callback.message.answers[0].text, "🔕 Вы отписались от Англии.")
 
     async def test_table_selected_reads_latest_standings(self) -> None:
         table = StandingTableView(
@@ -452,13 +462,14 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
         await handle_current_round_selected(callback, football_user_service=service)
 
         self.assertEqual(callback.message.answers[0].text, render_matchday_rounds_state("Испания", (round_,), match_date))
-        self.assertIn("Матчи сегодня:", callback.message.answers[0].text)
+        self.assertIn("📅 <b>Матчи сегодня</b>", callback.message.answers[0].text)
 
 
 class FakeAnswer:
-    def __init__(self, text: str, reply_markup: object | None) -> None:
+    def __init__(self, text: str, reply_markup: object | None, parse_mode: str | None = None) -> None:
         self.text = text
         self.reply_markup = reply_markup
+        self.parse_mode = parse_mode
 
 
 class FakeMessage:
@@ -478,8 +489,8 @@ class FakeMessage:
         )
         self.answers: list[FakeAnswer] = []
 
-    async def answer(self, text: str, reply_markup: object | None = None) -> None:
-        self.answers.append(FakeAnswer(text=text, reply_markup=reply_markup))
+    async def answer(self, text: str, reply_markup: object | None = None, parse_mode: str | None = None) -> None:
+        self.answers.append(FakeAnswer(text=text, reply_markup=reply_markup, parse_mode=parse_mode))
 
 
 class FakeCallback:
