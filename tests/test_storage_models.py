@@ -78,6 +78,8 @@ class StorageModelsTest(unittest.TestCase):
         self.assertIn('"name": "Италия"', migration_text)
         self.assertIn('"code": "france"', migration_text)
         self.assertIn('"name": "Франция"', migration_text)
+        self.assertIn('"code": "ruschamp"', migration_text)
+        self.assertIn('"name": "Россия"', migration_text)
         self.assertNotIn("�", migration_text)
 
     def test_alembic_can_render_offline_upgrade_sql(self) -> None:
@@ -123,6 +125,14 @@ class StorageModelsTest(unittest.TestCase):
 
         self.assertIn("is_own_goal", migration_text)
         self.assertIn("match_goal_events", migration_text)
+
+    def test_russia_league_migration_adds_new_source(self) -> None:
+        migration = PROJECT_ROOT / "migrations" / "versions" / "202609010002_seed_russia_league.py"
+        migration_text = migration.read_text(encoding="utf-8")
+
+        self.assertIn("ruschamp", migration_text)
+        self.assertIn("Россия", migration_text)
+        self.assertIn("https://football.kulichki.net/ruschamp/", migration_text)
 
 
 def _has_unique_constraint(model: type[object], *column_names: str) -> bool:

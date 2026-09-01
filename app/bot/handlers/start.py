@@ -356,6 +356,7 @@ def _league_name_for_unsubscribe(code: str, default_name: str) -> str:
         "germany": "Германии",
         "italy": "Италии",
         "france": "Франции",
+        "ruschamp": "России",
     }
     return names.get(code, default_name)
 

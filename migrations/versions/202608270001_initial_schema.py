@@ -287,6 +287,13 @@ def upgrade() -> None:
                 "source_url": "https://football.kulichki.net/france/",
                 "is_active": True,
             },
+            {
+                "source": "kulichki",
+                "code": "ruschamp",
+                "name": "Россия",
+                "source_url": "https://football.kulichki.net/ruschamp/",
+                "is_active": True,
+            },
         ],
     )
 
