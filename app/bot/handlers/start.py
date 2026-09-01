@@ -351,6 +351,9 @@ def _league_name_by_code(code: str) -> str:
 
 def _league_name_for_unsubscribe(code: str, default_name: str) -> str:
     names = {
+        "league": "Лиги чемпионов",
+        "uefa_cup": "Лиги Европы",
+        "lc": "Лиги конференций",
         "england": "Англии",
         "spain": "Испании",
         "germany": "Германии",

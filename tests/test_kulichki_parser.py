@@ -46,6 +46,23 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(data.standings[0].team_name, "Ливерпуль")
         self.assertEqual(data.standings[0].points, 3)
 
+    def test_parse_tournament_page_uses_tournament_url_path_for_rounds(self) -> None:
+        html = _read_fixture("england_league.html")
+
+        data = self.parser.parse_league_page(
+            html,
+            url="https://football.kulichki.net/league/",
+            league_code="league",
+            league_name="Лига чемпионов",
+        )
+
+        self.assertEqual(data.league.code, "league")
+        self.assertEqual(data.league.name, "Лига чемпионов")
+        self.assertIsNotNone(data.current_round)
+        assert data.current_round is not None
+        self.assertEqual(data.current_round.source_url, "https://football.kulichki.net/league/2027/1/")
+        self.assertEqual(len(data.current_round.matches), 2)
+
     def test_parse_round_page_extracts_round_matches_from_table(self) -> None:
         html = _read_fixture("spain_round.html")
 

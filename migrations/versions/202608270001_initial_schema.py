@@ -254,6 +254,27 @@ def upgrade() -> None:
         [
             {
                 "source": "kulichki",
+                "code": "league",
+                "name": "Лига чемпионов",
+                "source_url": "https://football.kulichki.net/league/",
+                "is_active": True,
+            },
+            {
+                "source": "kulichki",
+                "code": "uefa_cup",
+                "name": "Лига Европы",
+                "source_url": "https://football.kulichki.net/uefa_cup/",
+                "is_active": True,
+            },
+            {
+                "source": "kulichki",
+                "code": "lc",
+                "name": "Лига конференций",
+                "source_url": "https://football.kulichki.net/lc/",
+                "is_active": True,
+            },
+            {
+                "source": "kulichki",
                 "code": "england",
                 "name": "Англия",
                 "source_url": "https://football.kulichki.net/england/",

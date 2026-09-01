@@ -68,6 +68,12 @@ class StorageModelsTest(unittest.TestCase):
         migration = PROJECT_ROOT / "migrations" / "versions" / "202608270001_initial_schema.py"
         migration_text = migration.read_text(encoding="utf-8")
 
+        self.assertIn('"code": "league"', migration_text)
+        self.assertIn('"name": "Лига чемпионов"', migration_text)
+        self.assertIn('"code": "uefa_cup"', migration_text)
+        self.assertIn('"name": "Лига Европы"', migration_text)
+        self.assertIn('"code": "lc"', migration_text)
+        self.assertIn('"name": "Лига конференций"', migration_text)
         self.assertIn('"code": "england"', migration_text)
         self.assertIn('"name": "Англия"', migration_text)
         self.assertIn('"code": "spain"', migration_text)
@@ -133,6 +139,20 @@ class StorageModelsTest(unittest.TestCase):
         self.assertIn("ruschamp", migration_text)
         self.assertIn("Россия", migration_text)
         self.assertIn("https://football.kulichki.net/ruschamp/", migration_text)
+
+    def test_uefa_tournaments_migration_adds_new_sources(self) -> None:
+        migration = PROJECT_ROOT / "migrations" / "versions" / "202609010003_seed_uefa_tournaments.py"
+        migration_text = migration.read_text(encoding="utf-8")
+
+        self.assertIn("league", migration_text)
+        self.assertIn("Лига чемпионов", migration_text)
+        self.assertIn("https://football.kulichki.net/league/", migration_text)
+        self.assertIn("uefa_cup", migration_text)
+        self.assertIn("Лига Европы", migration_text)
+        self.assertIn("https://football.kulichki.net/uefa_cup/", migration_text)
+        self.assertIn("lc", migration_text)
+        self.assertIn("Лига конференций", migration_text)
+        self.assertIn("https://football.kulichki.net/lc/", migration_text)
 
 
 def _has_unique_constraint(model: type[object], *column_names: str) -> bool:

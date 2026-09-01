@@ -23,18 +23,31 @@ class UpdateFactoryTest(unittest.TestCase):
 
         self.assertEqual(
             [source.code for source in sources],
-            ["england", "spain", "germany", "italy", "france", "ruschamp"],
+            ["league", "uefa_cup", "lc", "england", "spain", "germany", "italy", "france", "ruschamp"],
         )
         self.assertEqual(
             [source.name for source in sources],
-            ["Англия", "Испания", "Германия", "Италия", "Франция", "Россия"],
+            [
+                "Лига чемпионов",
+                "Лига Европы",
+                "Лига конференций",
+                "Англия",
+                "Испания",
+                "Германия",
+                "Италия",
+                "Франция",
+                "Россия",
+            ],
         )
-        self.assertEqual(sources[0].url, "https://football.kulichki.net/england/")
-        self.assertEqual(sources[1].url, "https://football.kulichki.net/spain/")
-        self.assertEqual(sources[2].url, "https://football.kulichki.net/germany/")
-        self.assertEqual(sources[3].url, "https://football.kulichki.net/italy/")
-        self.assertEqual(sources[4].url, "https://football.kulichki.net/france/")
-        self.assertEqual(sources[5].url, "https://football.kulichki.net/ruschamp/")
+        self.assertEqual(sources[0].url, "https://football.kulichki.net/league/")
+        self.assertEqual(sources[1].url, "https://football.kulichki.net/uefa_cup/")
+        self.assertEqual(sources[2].url, "https://football.kulichki.net/lc/")
+        self.assertEqual(sources[3].url, "https://football.kulichki.net/england/")
+        self.assertEqual(sources[4].url, "https://football.kulichki.net/spain/")
+        self.assertEqual(sources[5].url, "https://football.kulichki.net/germany/")
+        self.assertEqual(sources[6].url, "https://football.kulichki.net/italy/")
+        self.assertEqual(sources[7].url, "https://football.kulichki.net/france/")
+        self.assertEqual(sources[8].url, "https://football.kulichki.net/ruschamp/")
 
 
 if __name__ == "__main__":

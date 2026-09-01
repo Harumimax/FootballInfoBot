@@ -105,19 +105,20 @@ class BotManualUxTest(unittest.TestCase):
         )
 
     def test_subscription_keyboard_marks_active_leagues(self) -> None:
-        keyboard = build_subscription_keyboard(subscribed_league_codes=frozenset({"england"}))
+        keyboard = build_subscription_keyboard(subscribed_league_codes=frozenset({"league", "england"}))
         first_button = keyboard.inline_keyboard[0][0]
-        second_button = keyboard.inline_keyboard[1][0]
-        fifth_button = keyboard.inline_keyboard[4][0]
-        sixth_button = keyboard.inline_keyboard[5][0]
+        fourth_button = keyboard.inline_keyboard[3][0]
+        eighth_button = keyboard.inline_keyboard[7][0]
+        ninth_button = keyboard.inline_keyboard[8][0]
 
-        self.assertEqual(first_button.text, "✓ Англия")
-        self.assertEqual(first_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}england")
-        self.assertEqual(second_button.text, "Испания")
-        self.assertEqual(fifth_button.text, "Франция")
-        self.assertEqual(fifth_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}france")
-        self.assertEqual(sixth_button.text, "Россия")
-        self.assertEqual(sixth_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}ruschamp")
+        self.assertEqual(first_button.text, "✓ Лига чемпионов")
+        self.assertEqual(first_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}league")
+        self.assertEqual(fourth_button.text, "✓ Англия")
+        self.assertEqual(fourth_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}england")
+        self.assertEqual(eighth_button.text, "Франция")
+        self.assertEqual(eighth_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}france")
+        self.assertEqual(ninth_button.text, "Россия")
+        self.assertEqual(ninth_button.callback_data, f"{CALLBACK_SUBSCRIPTION_TOGGLE_PREFIX}ruschamp")
 
     def test_subscription_type_keyboard_offers_league_or_team_path(self) -> None:
         keyboard = build_subscription_type_keyboard()
@@ -161,18 +162,18 @@ class BotManualUxTest(unittest.TestCase):
         table_keyboard = build_table_league_keyboard()
         round_keyboard = build_current_round_league_keyboard()
 
-        self.assertEqual(table_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_TABLE_PREFIX}england")
-        self.assertEqual(table_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_TABLE_PREFIX}spain")
-        self.assertEqual(table_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_TABLE_PREFIX}germany")
-        self.assertEqual(table_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_TABLE_PREFIX}italy")
-        self.assertEqual(table_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_TABLE_PREFIX}france")
-        self.assertEqual(table_keyboard.inline_keyboard[5][0].callback_data, f"{CALLBACK_TABLE_PREFIX}ruschamp")
-        self.assertEqual(round_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}england")
-        self.assertEqual(round_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}spain")
-        self.assertEqual(round_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}germany")
-        self.assertEqual(round_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}italy")
-        self.assertEqual(round_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}france")
-        self.assertEqual(round_keyboard.inline_keyboard[5][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}ruschamp")
+        self.assertEqual(table_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_TABLE_PREFIX}league")
+        self.assertEqual(table_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_TABLE_PREFIX}uefa_cup")
+        self.assertEqual(table_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_TABLE_PREFIX}lc")
+        self.assertEqual(table_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_TABLE_PREFIX}england")
+        self.assertEqual(table_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_TABLE_PREFIX}spain")
+        self.assertEqual(table_keyboard.inline_keyboard[8][0].callback_data, f"{CALLBACK_TABLE_PREFIX}ruschamp")
+        self.assertEqual(round_keyboard.inline_keyboard[0][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}league")
+        self.assertEqual(round_keyboard.inline_keyboard[1][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}uefa_cup")
+        self.assertEqual(round_keyboard.inline_keyboard[2][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}lc")
+        self.assertEqual(round_keyboard.inline_keyboard[3][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}england")
+        self.assertEqual(round_keyboard.inline_keyboard[4][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}spain")
+        self.assertEqual(round_keyboard.inline_keyboard[8][0].callback_data, f"{CALLBACK_CURRENT_ROUND_PREFIX}ruschamp")
 
     def test_render_round_state_includes_date_time_and_scores(self) -> None:
         round_ = ParsedRound(
@@ -312,7 +313,7 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
         await handle_subscription_league_menu(callback, football_user_service=service)
 
         keyboard = callback.message.answers[0].reply_markup
-        self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓ Испания")
+        self.assertEqual(keyboard.inline_keyboard[4][0].text, "✓ Испания")
 
     async def test_team_subscription_flow_shows_leagues_then_teams(self) -> None:
         service = FakeFootballUserService(
@@ -325,14 +326,14 @@ class BotLiveUserActionsTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             callback.message.answers[0].reply_markup.inline_keyboard[0][0].callback_data,
-            f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}england",
+            f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}league",
         )
         self.assertEqual(
-            callback.message.answers[0].reply_markup.inline_keyboard[4][0].callback_data,
-            f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}france",
+            callback.message.answers[0].reply_markup.inline_keyboard[2][0].callback_data,
+            f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}lc",
         )
         self.assertEqual(
-            callback.message.answers[0].reply_markup.inline_keyboard[5][0].callback_data,
+            callback.message.answers[0].reply_markup.inline_keyboard[8][0].callback_data,
             f"{CALLBACK_TEAM_SUBSCRIPTION_LEAGUE_PREFIX}ruschamp",
         )
 
