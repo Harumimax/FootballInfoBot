@@ -361,27 +361,16 @@ class FootballDataSqlAlchemyRepository:
         if league is None:
             return None
 
-        active_round_statement = (
-            select(Round)
-            .join(Season, Season.id == Round.season_id)
-            .where(Round.league_id == league.id, Season.is_current.is_(True), Round.status == "active")
-            .order_by(desc(Round.round_number))
-            .limit(1)
-        )
-        round_ = await self._session.scalar(active_round_statement)
-        if round_ is None:
+        season = await self._get_current_season(league)
+        if season is None:
             return CurrentRoundView(league=LeagueView(code=league.code, name=league.name), round=None)
 
-        season = await self._get_current_season(league)
         rounds = await self._load_current_visible_rounds(league, season) if season is not None else ()
+        round_ = rounds[0] if rounds else None
 
         return CurrentRoundView(
             league=LeagueView(code=league.code, name=league.name),
-            round=ParsedRound(
-                number=round_.round_number,
-                source_url=round_.source_url,
-                matches=await self._load_round_matches(round_),
-            ),
+            round=round_,
             rounds=rounds,
         )
 
@@ -803,16 +792,56 @@ class FootballDataSqlAlchemyRepository:
         return tuple(rounds)
 
     async def _load_current_visible_rounds(self, league: League, season: Season) -> tuple[ParsedRound, ...]:
-        statement = (
+        active_statement = (
             select(Round)
             .outerjoin(Match, Match.round_id == Round.id)
             .where(
                 Round.league_id == league.id,
                 Round.season_id == season.id,
-                Round.status.in_(("active", "planned")),
+                Round.status == "active",
             )
-            .order_by(desc(Round.status == "active"), desc(Round.round_number))
+            .order_by(desc(Round.round_number))
         )
+        active_rounds = await self._load_rounds_with_matches(active_statement)
+        if active_rounds:
+            catch_up_statement = (
+                select(Round)
+                .outerjoin(Match, Match.round_id == Round.id)
+                .where(
+                    Round.league_id == league.id,
+                    Round.season_id == season.id,
+                    Round.status == "planned",
+                )
+                .order_by(desc(Round.round_number))
+            )
+            catch_up_rounds = await self._load_rounds_with_matches(catch_up_statement)
+            return (*active_rounds, *catch_up_rounds)
+
+        next_round_statement = (
+            select(Round)
+            .join(Match, Match.round_id == Round.id)
+            .where(
+                Round.league_id == league.id,
+                Round.season_id == season.id,
+                Round.status == "planned",
+                Match.scheduled_at.is_not(None),
+                Match.scheduled_at >= datetime.now(tz=None).astimezone(),
+            )
+            .order_by(Match.scheduled_at, Round.round_number)
+            .limit(1)
+        )
+        next_round = await self._session.scalar(next_round_statement)
+        if next_round is None:
+            return ()
+
+        parsed_round = ParsedRound(
+            number=next_round.round_number,
+            source_url=next_round.source_url,
+            matches=await self._load_round_matches(next_round),
+        )
+        return (parsed_round,) if parsed_round.matches else ()
+
+    async def _load_rounds_with_matches(self, statement) -> tuple[ParsedRound, ...]:  # noqa: ANN001
         result = await self._session.scalars(statement)
         rounds = []
         seen_round_ids = set()

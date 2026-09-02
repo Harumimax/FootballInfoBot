@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime
+from unittest.mock import AsyncMock
 
 from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.storage.models import League, MatchGoalEvent, Round, StandingRow
@@ -68,6 +69,42 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subscribers, ())
         self.assertEqual(len(session.executed_statements), 1)
         self.assertNotIn("NOT IN", str(session.executed_statements[0]).upper())
+
+    async def test_get_current_round_returns_upcoming_round_when_no_active_round_exists(self) -> None:
+        session = FakeAsyncSession()
+        repository = FootballDataSqlAlchemyRepository(session)
+        league = League(
+            id=10,
+            source="kulichki",
+            code="league",
+            name="Лига чемпионов",
+            source_url="https://football.kulichki.net/league/",
+        )
+        season = object()
+        upcoming_round = ParsedRound(
+            number=1,
+            source_url="https://football.kulichki.net/league/2027/1/",
+            matches=(
+                ParsedMatch(
+                    home_team="ПСЖ",
+                    away_team="Бавария",
+                    scheduled_at=datetime(2026, 9, 17, 22, 0),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+            ),
+        )
+        repository._get_active_league_by_code = AsyncMock(return_value=league)  # type: ignore[method-assign]
+        repository._get_current_season = AsyncMock(return_value=season)  # type: ignore[method-assign]
+        repository._load_current_visible_rounds = AsyncMock(return_value=(upcoming_round,))  # type: ignore[method-assign]
+
+        result = await repository.get_current_round("league")
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.round, upcoming_round)
+        self.assertEqual(result.rounds, (upcoming_round,))
 
     async def test_save_league_page_data_persists_all_visible_rounds(self) -> None:
         session = FakeAsyncSession()
