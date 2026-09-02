@@ -276,6 +276,43 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(first_standing.goal_difference, 4)
         self.assertEqual(first_standing.points, 6)
 
+
+    def test_parse_round_page_keeps_upcoming_matches_with_online_links(self) -> None:
+        html = """
+        <html><body>
+        <h1>РОССИЙСКАЯ ПРЕМЬЕР-ЛИГА 2026/2027</h1>
+        <table>
+          <tr><td colspan="4"><b>7-й тур.</b></td></tr>
+          <tr>
+            <td>5 сентября</td>
+            <td><a href="/ruschamp/2027/teams/ks.htm">Крылья Советов</a> - <a href="/ruschamp/2027/teams/krasnodar.htm">Краснодар</a></td>
+            <td>14:00</td>
+            <td><a href="/online/12345.htm">Онлайн</a></td>
+          </tr>
+          <tr>
+            <td>5 сентября</td>
+            <td><a href="/ruschamp/2027/teams/zenit.htm">Зенит</a> - <a href="/ruschamp/2027/teams/cska.htm">ЦСКА</a></td>
+            <td>16:30</td>
+            <td><a href="/online/12346.htm">Онлайн</a></td>
+          </tr>
+        </table>
+        </body></html>
+        """
+
+        data = self.parser.parse_round_page(
+            html,
+            url="https://football.kulichki.net/ruschamp/2027/7/",
+            league_code="ruschamp",
+            league_name="Россия",
+        )
+
+        self.assertEqual(data.round.number, 7)
+        self.assertEqual(len(data.round.matches), 2)
+        self.assertEqual(data.round.matches[0].home_team, "Крылья Советов")
+        self.assertEqual(data.round.matches[0].away_team, "Краснодар")
+        self.assertEqual(data.round.matches[0].status, "scheduled")
+        self.assertEqual(data.round.matches[0].scheduled_at.strftime("%Y-%m-%d %H:%M"), "2026-09-05 14:00")
+
     def test_parse_match_page_extracts_goal_events_from_review(self) -> None:
         html = _read_fixture("spain_match_review_live.html")
 

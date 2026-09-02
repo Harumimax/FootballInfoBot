@@ -684,6 +684,8 @@ def _match_belongs_to_round(match: ParsedMatch, round_number: int | None) -> boo
     if round_number is None or match.source_url is None:
         return True
     path = urlparse(match.source_url).path
+    if not re.search(r"/\d{4}/\d+/", path) and not re.search(r"/\d{4}/\d+$", path.rstrip("/")):
+        return True
     return f"/{round_number}/" in path or path.rstrip("/").endswith(f"/{round_number}")
 
 
