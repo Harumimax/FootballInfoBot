@@ -172,6 +172,25 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(standing_row.goal_difference, 4)
         self.assertEqual(standing_row.points, 6)
 
+    async def test_save_league_page_data_skips_duplicate_standing_teams(self) -> None:
+        session = FakeAsyncSession()
+        repository = FootballDataSqlAlchemyRepository(session)
+        data = LeaguePageData(
+            league=ParsedLeague(code="league", name="Лига чемпионов", source_url="https://football.kulichki.net/league/"),
+            season_label="2026/2027",
+            source_season_key="2027",
+            current_round=None,
+            standings=(
+                ParsedStandingRow(position=1, team_name="ПСЖ", played=0, points=0),
+                ParsedStandingRow(position=1, team_name="ПСЖ", played=0, points=0),
+            ),
+        )
+
+        await repository.save_league_page_data(data)
+
+        added_standing_rows = [entity for entity in session.added if isinstance(entity, StandingRow)]
+        self.assertEqual(len(added_standing_rows), 1)
+
     async def test_save_league_page_data_persists_goal_events(self) -> None:
         session = FakeAsyncSession()
         repository = FootballDataSqlAlchemyRepository(session)

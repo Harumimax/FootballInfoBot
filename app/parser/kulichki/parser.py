@@ -497,7 +497,19 @@ def _extract_standings(soup: BeautifulSoup) -> list[ParsedStandingRow]:
                 )
             )
 
-    return rows
+    return _deduplicate_standings(rows)
+
+
+def _deduplicate_standings(rows: list[ParsedStandingRow]) -> list[ParsedStandingRow]:
+    seen = set()
+    unique = []
+    for row in rows:
+        key = _clean_team_name(row.team_name).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return unique
 
 
 def _looks_like_standings_table(table: Tag) -> bool:

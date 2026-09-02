@@ -701,7 +701,12 @@ class FootballDataSqlAlchemyRepository:
         self._session.add(snapshot)
         await self._session.flush()
 
+        seen_team_names = set()
         for row in standings:
+            team_name = row.team_name.strip().casefold()
+            if team_name in seen_team_names:
+                continue
+            seen_team_names.add(team_name)
             team = await self._upsert_team(row.team_name)
             self._session.add(
                 StandingRow(
