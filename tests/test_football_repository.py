@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.storage.models import League, MatchGoalEvent, Round, StandingRow
 from app.storage.repositories import FootballDataSqlAlchemyRepository
+from app.storage.repositories.football import _filter_nearby_catch_up_rounds
 
 
 class FakeAsyncSession:
@@ -106,6 +107,54 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         assert result is not None
         self.assertEqual(result.round, upcoming_round)
         self.assertEqual(result.rounds, (upcoming_round,))
+
+    def test_filter_nearby_catch_up_rounds_keeps_only_rounds_near_active_dates(self) -> None:
+        active_round = ParsedRound(
+            number=1,
+            source_url="https://football.kulichki.net/league/2027/1/",
+            matches=(
+                ParsedMatch(
+                    home_team="Ливерпуль",
+                    away_team="Атлетико",
+                    scheduled_at=datetime(2026, 9, 8, 22, 0),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+            ),
+        )
+        future_round = ParsedRound(
+            number=2,
+            source_url="https://football.kulichki.net/league/2027/2/",
+            matches=(
+                ParsedMatch(
+                    home_team="ПСЖ",
+                    away_team="Бавария",
+                    scheduled_at=datetime(2026, 10, 13, 22, 0),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+            ),
+        )
+        catch_up_round = ParsedRound(
+            number=0,
+            source_url="https://football.kulichki.net/league/2027/0/",
+            matches=(
+                ParsedMatch(
+                    home_team="Реал",
+                    away_team="Барселона",
+                    scheduled_at=datetime(2026, 9, 6, 22, 0),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+            ),
+        )
+
+        result = _filter_nearby_catch_up_rounds((active_round,), (future_round, catch_up_round))
+
+        self.assertEqual(result, (catch_up_round,))
 
     async def test_save_league_page_data_persists_all_visible_rounds(self) -> None:
         session = FakeAsyncSession()

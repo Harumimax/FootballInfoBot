@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +42,9 @@ from app.storage.models import (
     TeamSubscription,
     User,
 )
+
+
+CATCH_UP_ROUND_LOOKBACK_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -815,6 +818,7 @@ class FootballDataSqlAlchemyRepository:
                 .order_by(desc(Round.round_number))
             )
             catch_up_rounds = await self._load_rounds_with_matches(catch_up_statement)
+            catch_up_rounds = _filter_nearby_catch_up_rounds(active_rounds, catch_up_rounds)
             return (*active_rounds, *catch_up_rounds)
 
         next_round_statement = (
@@ -965,6 +969,43 @@ def normalize_team_name(source_name: str) -> str:
 def normalize_team_display_name(source_name: str) -> str:
     clean_name = re.sub(r"\s+", " ", source_name.replace("\xa0", " ")).strip()
     return re.sub(r"\s+\([^()]+\)\s*$", "", clean_name).strip()
+
+
+def _filter_nearby_catch_up_rounds(
+    active_rounds: tuple[ParsedRound, ...],
+    catch_up_rounds: tuple[ParsedRound, ...],
+) -> tuple[ParsedRound, ...]:
+    active_bounds = _rounds_date_bounds(active_rounds)
+    if active_bounds is None:
+        return ()
+
+    active_start, active_end = active_bounds
+    window_start = active_start - timedelta(days=CATCH_UP_ROUND_LOOKBACK_DAYS)
+    window_end = active_end
+    return tuple(
+        round_
+        for round_ in catch_up_rounds
+        if _round_has_match_between(round_, start_date=window_start, end_date=window_end)
+    )
+
+
+def _rounds_date_bounds(rounds: tuple[ParsedRound, ...]) -> tuple[date, date] | None:
+    match_dates = [
+        match.scheduled_at.date()
+        for round_ in rounds
+        for match in round_.matches
+        if match.scheduled_at is not None
+    ]
+    if not match_dates:
+        return None
+    return min(match_dates), max(match_dates)
+
+
+def _round_has_match_between(round_: ParsedRound, *, start_date: date, end_date: date) -> bool:
+    return any(
+        match.scheduled_at is not None and start_date <= match.scheduled_at.date() <= end_date
+        for match in round_.matches
+    )
 
 
 def _iter_league_rounds(data: LeaguePageData) -> tuple[ParsedRound, ...]:
