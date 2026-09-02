@@ -69,6 +69,7 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subscribers, ())
         self.assertEqual(len(session.executed_statements), 1)
         self.assertNotIn("NOT IN", str(session.executed_statements[0]).upper())
+        self.assertNotIn("team_subscriptions.league_id =", str(session.executed_statements[0]))
 
     async def test_get_current_round_returns_upcoming_round_when_no_active_round_exists(self) -> None:
         session = FakeAsyncSession()

@@ -144,6 +144,96 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("27.08 22:00 Барселона - Атлетик", sender.sent_notifications[0].text)
         self.assertNotIn("Атлетико", sender.sent_notifications[0].text)
 
+    async def test_morning_push_sends_team_subscription_for_tournament_match_with_country_suffix(self) -> None:
+        match_date = datetime(2026, 9, 9).date()
+        rounds = (
+            ParsedRound(
+                number=1,
+                source_url="https://football.kulichki.net/league/2027/1/",
+                matches=(
+                    ParsedMatch(
+                        home_team="Ливерпуль (Англия)",
+                        away_team="Атлетико (Испания)",
+                        scheduled_at=datetime(2026, 9, 9, 22, 0),
+                        home_score=None,
+                        away_score=None,
+                        status="scheduled",
+                    ),
+                ),
+            ),
+        )
+        repository = FakePushRepository(
+            states=(
+                LeagueRoundState(
+                    league=LeagueView(code="league", name="Лига чемпионов"),
+                    round=rounds[0],
+                    rounds=rounds,
+                    has_match_today=True,
+                    all_today_matches_finished=False,
+                    has_changes_today=False,
+                ),
+            ),
+            subscribers_by_league={},
+            team_subscribers_by_league={
+                "league": (TeamSubscriberView(user_id=2, telegram_user_id=2002, team_id=7, team_name="Ливерпуль"),)
+            },
+        )
+        sender = FakePushSender()
+        service = PushNotificationService(repository=repository, sender=sender)
+
+        result = await service.send_morning_pushes(datetime(2026, 9, 9, 9, 0))
+
+        self.assertEqual(result.sent_count, 1)
+        self.assertEqual(sender.sent_notifications[0].dedupe_key, "morning:2026-09-09:league:team:7:2002")
+        self.assertIn("⭐ <b>Ливерпуль</b>", sender.sent_notifications[0].text)
+        self.assertIn("🏆 Лига чемпионов", sender.sent_notifications[0].text)
+        self.assertIn("09.09 22:00 Ливерпуль (Англия) - Атлетико (Испания)", sender.sent_notifications[0].text)
+
+    async def test_morning_push_deduplicates_same_team_subscriptions(self) -> None:
+        match_date = datetime(2026, 9, 9).date()
+        rounds = (
+            ParsedRound(
+                number=1,
+                source_url="https://football.kulichki.net/league/2027/1/",
+                matches=(
+                    ParsedMatch(
+                        home_team="Ливерпуль (Англия)",
+                        away_team="Атлетико (Испания)",
+                        scheduled_at=datetime(2026, 9, 9, 22, 0),
+                        home_score=None,
+                        away_score=None,
+                        status="scheduled",
+                    ),
+                ),
+            ),
+        )
+        repository = FakePushRepository(
+            states=(
+                LeagueRoundState(
+                    league=LeagueView(code="league", name="Лига чемпионов"),
+                    round=rounds[0],
+                    rounds=rounds,
+                    has_match_today=True,
+                    all_today_matches_finished=False,
+                    has_changes_today=False,
+                ),
+            ),
+            subscribers_by_league={},
+            team_subscribers_by_league={
+                "league": (
+                    TeamSubscriberView(user_id=2, telegram_user_id=2002, team_id=7, team_name="Ливерпуль"),
+                    TeamSubscriberView(user_id=2, telegram_user_id=2002, team_id=17, team_name="Ливерпуль (Англия)"),
+                )
+            },
+        )
+        sender = FakePushSender()
+        service = PushNotificationService(repository=repository, sender=sender)
+
+        result = await service.send_morning_pushes(datetime(2026, 9, 9, 9, 0))
+
+        self.assertEqual(result.sent_count, 1)
+        self.assertEqual(len(sender.sent_notifications), 1)
+
     async def test_morning_push_sends_league_and_team_subscriptions_as_separate_messages(self) -> None:
         rounds = (_sample_round(), _catch_up_round())
         repository = FakePushRepository(

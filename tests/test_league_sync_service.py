@@ -208,6 +208,10 @@ class LeagueSyncServiceTest(unittest.IsolatedAsyncioTestCase):
     def test_normalize_team_name_collapses_spaces_and_casefolds(self) -> None:
         self.assertEqual(normalize_team_name("  Реал   Мадрид  "), "реал мадрид")
 
+    def test_normalize_team_name_strips_country_suffix(self) -> None:
+        self.assertEqual(normalize_team_name("Ливерпуль (Англия)"), "ливерпуль")
+        self.assertEqual(normalize_team_name("  Атлетико   (Испания)  "), "атлетико")
+
 
 def _read_fixture(name: str) -> str:
     return (FIXTURES_DIR / name).read_text(encoding="utf-8")

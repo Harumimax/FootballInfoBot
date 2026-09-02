@@ -176,7 +176,13 @@ class PushNotificationService:
 
             team_subscribers = await self._repository.get_active_team_subscribers_for_league(state.league.code)
             state_rounds = state.rounds or ((state.round,) if state.round is not None else ())
+            seen_team_subscriptions = set()
             for subscriber in team_subscribers:
+                team_subscription_key = (subscriber.telegram_user_id, _normalize_team_name_for_match(subscriber.team_name))
+                if team_subscription_key in seen_team_subscriptions:
+                    continue
+                seen_team_subscriptions.add(team_subscription_key)
+
                 team_rounds = _filter_rounds_by_team(state_rounds, subscriber.team_name)
                 if not _has_match_on_date(team_rounds, match_date):
                     continue
@@ -225,17 +231,24 @@ def _is_last_after_matchday_check(checked_at: datetime) -> bool:
 
 
 def _filter_rounds_by_team(rounds: tuple[ParsedRound, ...], team_name: str) -> tuple[ParsedRound, ...]:
-    normalized_team_name = team_name.casefold()
+    normalized_team_name = _normalize_team_name_for_match(team_name)
     filtered_rounds = []
     for round_ in rounds:
         matches = tuple(
             match
             for match in round_.matches
-            if match.home_team.casefold() == normalized_team_name or match.away_team.casefold() == normalized_team_name
+            if _normalize_team_name_for_match(match.home_team) == normalized_team_name
+            or _normalize_team_name_for_match(match.away_team) == normalized_team_name
         )
         if matches:
             filtered_rounds.append(ParsedRound(number=round_.number, source_url=round_.source_url, matches=matches))
     return tuple(filtered_rounds)
+
+
+def _normalize_team_name_for_match(team_name: str) -> str:
+    clean_name = " ".join(team_name.replace("\xa0", " ").split())
+    clean_name = clean_name.rsplit(" (", maxsplit=1)[0]
+    return clean_name.casefold()
 
 
 def _has_match_on_date(rounds: tuple[ParsedRound, ...], match_date: date) -> bool:

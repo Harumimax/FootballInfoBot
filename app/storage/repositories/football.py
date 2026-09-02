@@ -470,7 +470,6 @@ class FootballDataSqlAlchemyRepository:
             .join(TeamSubscription, TeamSubscription.user_id == User.id)
             .join(Team, Team.id == TeamSubscription.team_id)
             .where(
-                TeamSubscription.league_id == league.id,
                 TeamSubscription.is_active.is_(True),
                 TeamSubscription.notify_digest.is_(True),
             )
@@ -656,6 +655,7 @@ class FootballDataSqlAlchemyRepository:
 
     async def _upsert_team(self, source_name: str) -> Team:
         normalized_name = normalize_team_name(source_name)
+        display_name = normalize_team_display_name(source_name)
         statement = select(Team).where(Team.source == "kulichki", Team.normalized_name == normalized_name)
         team = await self._session.scalar(statement)
 
@@ -664,12 +664,12 @@ class FootballDataSqlAlchemyRepository:
                 source="kulichki",
                 source_name=source_name,
                 normalized_name=normalized_name,
-                display_name=source_name,
+                display_name=display_name,
             )
             self._session.add(team)
         else:
             team.source_name = source_name
-            team.display_name = source_name
+            team.display_name = display_name
 
         await self._session.flush()
         return team
@@ -959,7 +959,12 @@ class FootballDataSqlAlchemyRepository:
 
 
 def normalize_team_name(source_name: str) -> str:
-    return re.sub(r"\s+", " ", source_name.strip().casefold())
+    return normalize_team_display_name(source_name).casefold()
+
+
+def normalize_team_display_name(source_name: str) -> str:
+    clean_name = re.sub(r"\s+", " ", source_name.replace("\xa0", " ")).strip()
+    return re.sub(r"\s+\([^()]+\)\s*$", "", clean_name).strip()
 
 
 def _iter_league_rounds(data: LeaguePageData) -> tuple[ParsedRound, ...]:
