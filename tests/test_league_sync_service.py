@@ -109,21 +109,21 @@ class LeagueSyncServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.current_round_number, 3)
         self.assertEqual(result.parsed_matches, 14)
 
-    async def test_sync_league_fetches_next_round_when_current_round_is_finished(self) -> None:
-        league_url = "https://football.kulichki.net/fnl/"
-        next_round_url = "https://football.kulichki.net/fnl/2027/10/"
+    async def test_sync_league_fetches_visible_rounds_from_next_page_when_current_round_is_finished(self) -> None:
+        league_url = "https://football.kulichki.net/spain/"
+        next_round_url = "https://football.kulichki.net/spain/2027/4/"
         league_html = """
         <html>
-            <body data-current-round="9">
-                <h1>ФНЛ 2026/2027</h1>
-                <section data-current-round="9">
-                    <h2>9-й тур</h2>
+            <body data-current-round="3">
+                <h1>ЧЕМПИОНАТ ИСПАНИИ 2026/2027</h1>
+                <section data-current-round="3">
+                    <h2>3-й тур</h2>
                     <div data-match>
-                        <span data-match-date>30.08.2026</span>
-                        <span data-match-time>19:00</span>
-                        <span data-home-team>Арсенал</span>
-                        <span data-score>1:0</span>
-                        <span data-away-team>Ротор</span>
+                        <span data-match-date>31.08.2026</span>
+                        <span data-match-time>22:30</span>
+                        <span data-home-team>Барселона</span>
+                        <span data-score>5:2</span>
+                        <span data-away-team>Райо Вальекано</span>
                         <span data-status>завершен</span>
                     </div>
                 </section>
@@ -132,16 +132,27 @@ class LeagueSyncServiceTest(unittest.IsolatedAsyncioTestCase):
         """
         next_round_html = """
         <html>
-            <body data-current-round="10">
-                <h1>ФНЛ 2026/2027</h1>
+            <body data-current-round="6">
+                <h1>ЧЕМПИОНАТ ИСПАНИИ 2026/2027</h1>
                 <section>
-                    <h2>10-й тур</h2>
+                    <h2>6-й тур</h2>
                     <div data-match>
-                        <span data-match-date>05.09.2026</span>
-                        <span data-match-time>17:00</span>
-                        <span data-home-team>КАМАЗ</span>
+                        <span data-match-date>03.09.2026</span>
+                        <span data-match-time>22:00</span>
+                        <span data-home-team>Реал Сосьедад</span>
                         <span data-score></span>
-                        <span data-away-team>Урал</span>
+                        <span data-away-team>Сельта</span>
+                        <span data-status>анонс</span>
+                    </div>
+                </section>
+                <section>
+                    <h2>4-й тур</h2>
+                    <div data-match>
+                        <span data-match-date>04.09.2026</span>
+                        <span data-match-time>22:00</span>
+                        <span data-home-team>Бетис</span>
+                        <span data-score></span>
+                        <span data-away-team>Реал Мадрид</span>
                         <span data-status>анонс</span>
                     </div>
                 </section>
@@ -159,15 +170,16 @@ class LeagueSyncServiceTest(unittest.IsolatedAsyncioTestCase):
             page_client=client,
             parser=KulichkiParser(base_url="https://football.kulichki.net"),
             repository=repository,
-            league_sources=(LeagueSource(code="fnl", name="Россия", url=league_url),),
+            league_sources=(LeagueSource(code="spain", name="Испания", url=league_url),),
         )
 
-        result = await service.sync_league("fnl")
+        result = await service.sync_league("spain")
 
         self.assertEqual(result.status, "success")
-        self.assertEqual(result.parsed_matches, 2)
+        self.assertEqual(result.current_round_number, 3)
+        self.assertEqual(result.parsed_matches, 3)
         self.assertEqual(client.fetched_urls, [league_url, next_round_url])
-        self.assertEqual([round_.number for round_ in repository.saved_pages[0].rounds], [9, 10])
+        self.assertEqual([round_.number for round_ in repository.saved_pages[0].rounds], [3, 6, 4])
 
     async def test_sync_league_enriches_finished_matches_with_goal_events(self) -> None:
         league_html = _read_fixture("spain_league_live.html")

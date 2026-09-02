@@ -157,11 +157,72 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         result = _select_finished_active_rounds(
             (finished_round,),
             (catch_up_round,),
-            next_round,
+            (next_round,),
             current_date=datetime(2026, 9, 2).date(),
         )
 
         self.assertEqual(result, (finished_round, catch_up_round, next_round))
+
+    def test_select_finished_active_rounds_includes_early_future_round_before_next_regular_starts(self) -> None:
+        finished_round = ParsedRound(
+            number=3,
+            source_url="https://football.kulichki.net/spain/2027/3/",
+            matches=(
+                ParsedMatch(
+                    home_team="Барселона",
+                    away_team="Райо Вальекано",
+                    scheduled_at=datetime(2026, 8, 31, 22, 30),
+                    home_score=5,
+                    away_score=2,
+                    status="finished",
+                ),
+            ),
+        )
+        early_future_round = ParsedRound(
+            number=6,
+            source_url="https://football.kulichki.net/spain/2027/6/",
+            matches=(
+                ParsedMatch(
+                    home_team="Реал Сосьедад",
+                    away_team="Сельта",
+                    scheduled_at=datetime(2026, 9, 3, 22, 0),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+            ),
+        )
+        next_regular_round = ParsedRound(
+            number=4,
+            source_url="https://football.kulichki.net/spain/2027/4/",
+            matches=(
+                ParsedMatch(
+                    home_team="Бетис",
+                    away_team="Реал Мадрид",
+                    scheduled_at=datetime(2026, 9, 4, 22, 0),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+                ParsedMatch(
+                    home_team="Эльче",
+                    away_team="Реал Сосьедад",
+                    scheduled_at=datetime(2026, 9, 7, 22, 30),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+            ),
+        )
+
+        result = _select_finished_active_rounds(
+            (finished_round,),
+            (),
+            (next_regular_round, early_future_round),
+            current_date=datetime(2026, 9, 3).date(),
+        )
+
+        self.assertEqual(result, (finished_round, early_future_round, next_regular_round))
 
     def test_select_finished_active_rounds_prefers_next_round_on_start_date(self) -> None:
         finished_round = ParsedRound(
@@ -196,7 +257,7 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         result = _select_finished_active_rounds(
             (finished_round,),
             (),
-            next_round,
+            (next_round,),
             current_date=datetime(2026, 9, 5).date(),
         )
 

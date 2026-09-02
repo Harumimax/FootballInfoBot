@@ -821,55 +821,33 @@ class FootballDataSqlAlchemyRepository:
             .order_by(desc(Round.round_number))
         )
         active_rounds = await self._load_rounds_with_matches(active_statement)
-        next_round = await self._load_next_planned_round(league, season)
+        planned_rounds = await self._load_planned_rounds(league, season)
         if active_rounds:
-            catch_up_statement = (
-                select(Round)
-                .outerjoin(Match, Match.round_id == Round.id)
-                .where(
-                    Round.league_id == league.id,
-                    Round.season_id == season.id,
-                    Round.status == "planned",
-                )
-                .order_by(desc(Round.round_number))
-            )
-            catch_up_rounds = await self._load_rounds_with_matches(catch_up_statement)
-            catch_up_rounds = _filter_nearby_catch_up_rounds(active_rounds, catch_up_rounds)
+            catch_up_rounds = _filter_nearby_catch_up_rounds(active_rounds, planned_rounds)
             if all(_is_round_completed(round_) for round_ in active_rounds):
                 return _select_finished_active_rounds(
                     active_rounds,
                     catch_up_rounds,
-                    next_round,
+                    planned_rounds,
                     current_date=datetime.now(tz=None).astimezone().date(),
                 )
             return (*active_rounds, *catch_up_rounds)
 
+        next_round = _first_upcoming_round(planned_rounds, current_date=datetime.now(tz=None).astimezone().date())
         return (next_round,) if next_round is not None else ()
 
-    async def _load_next_planned_round(self, league: League, season: Season) -> ParsedRound | None:
-        next_round_statement = (
+    async def _load_planned_rounds(self, league: League, season: Season) -> tuple[ParsedRound, ...]:
+        statement = (
             select(Round)
-            .join(Match, Match.round_id == Round.id)
+            .outerjoin(Match, Match.round_id == Round.id)
             .where(
                 Round.league_id == league.id,
                 Round.season_id == season.id,
                 Round.status == "planned",
-                Match.scheduled_at.is_not(None),
-                Match.scheduled_at >= datetime.now(tz=None).astimezone(),
             )
-            .order_by(Match.scheduled_at, Round.round_number)
-            .limit(1)
+            .order_by(Round.round_number)
         )
-        next_round = await self._session.scalar(next_round_statement)
-        if next_round is None:
-            return None
-
-        parsed_round = ParsedRound(
-            number=next_round.round_number,
-            source_url=next_round.source_url,
-            matches=await self._load_round_matches(next_round),
-        )
-        return parsed_round if parsed_round.matches else None
+        return await self._load_rounds_with_matches(statement)
 
     async def _load_rounds_with_matches(self, statement) -> tuple[ParsedRound, ...]:  # noqa: ANN001
         result = await self._session.scalars(statement)
@@ -1006,20 +984,72 @@ def _is_round_completed(round_: ParsedRound) -> bool:
 def _select_finished_active_rounds(
     active_rounds: tuple[ParsedRound, ...],
     catch_up_rounds: tuple[ParsedRound, ...],
-    next_round: ParsedRound | None,
+    planned_rounds: tuple[ParsedRound, ...],
     *,
     current_date: date,
 ) -> tuple[ParsedRound, ...]:
-    if next_round is None:
+    next_round_number = max(round_.number for round_ in active_rounds) + 1
+    next_regular_round = next((round_ for round_ in planned_rounds if round_.number == next_round_number), None)
+    if next_regular_round is None:
+        next_regular_round = _first_upcoming_round(planned_rounds, current_date=current_date)
+    if next_regular_round is None:
         return (*active_rounds, *catch_up_rounds)
-    if _round_starts_on_or_before(next_round, current_date):
-        return (next_round,)
-    return (*active_rounds, *catch_up_rounds, next_round)
+    if _round_starts_on_or_before(next_regular_round, current_date):
+        return (next_regular_round,)
+
+    future_rounds = _future_rounds_until_regular_round_ends(
+        planned_rounds,
+        next_regular_round,
+        current_date=current_date,
+    )
+    return (*active_rounds, *catch_up_rounds, *future_rounds)
+
+
+def _first_upcoming_round(rounds: tuple[ParsedRound, ...], *, current_date: date) -> ParsedRound | None:
+    upcoming = [
+        round_
+        for round_ in rounds
+        if _round_last_date(round_) is not None and _round_last_date(round_) >= current_date
+    ]
+    if not upcoming:
+        return None
+    return min(upcoming, key=lambda round_: (_round_first_date(round_) or date.max, round_.number))
+
+
+def _future_rounds_until_regular_round_ends(
+    rounds: tuple[ParsedRound, ...],
+    regular_round: ParsedRound,
+    *,
+    current_date: date,
+) -> tuple[ParsedRound, ...]:
+    regular_end = _round_last_date(regular_round)
+    if regular_end is None:
+        return (regular_round,)
+    future_rounds = [
+        round_
+        for round_ in rounds
+        if _round_last_date(round_) is not None
+        and _round_last_date(round_) >= current_date
+        and (_round_first_date(round_) or date.max) <= regular_end
+    ]
+    return tuple(
+        sorted(future_rounds, key=lambda round_: (_round_first_date(round_) or date.max, round_.number))
+    )
 
 
 def _round_starts_on_or_before(round_: ParsedRound, current_date: date) -> bool:
+    first_date = _round_first_date(round_)
+    return first_date is not None and first_date <= current_date
+
+
+def _round_first_date(round_: ParsedRound) -> date | None:
     match_dates = [match.scheduled_at.date() for match in round_.matches if match.scheduled_at is not None]
-    return bool(match_dates) and min(match_dates) <= current_date
+    return min(match_dates) if match_dates else None
+
+
+def _round_last_date(round_: ParsedRound) -> date | None:
+    match_dates = [match.scheduled_at.date() for match in round_.matches if match.scheduled_at is not None]
+    return max(match_dates) if match_dates else None
 
 
 def _filter_nearby_catch_up_rounds(

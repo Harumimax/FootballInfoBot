@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.parser.clients.http import FetchedPage
-from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedMatch, ParsedRound, RoundPageData
+from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedMatch, ParsedRound
 
 
 @dataclass(frozen=True)
@@ -58,9 +58,6 @@ class PageClient(Protocol):
 
 class LeaguePageParser(Protocol):
     def parse_league_page(self, html: str, *, url: str, league_code: str, league_name: str) -> LeaguePageData:
-        pass
-
-    def parse_round_page(self, html: str, *, url: str, league_code: str, league_name: str) -> RoundPageData:
         pass
 
     def parse_match_page(self, html: str, *, url: str) -> tuple[ParsedGoalEvent, ...]:
@@ -177,16 +174,13 @@ class LeagueSyncService:
             return data
 
         next_round_number = current_round.number + 1
-        if any(round_.number == next_round_number for round_ in data.rounds):
-            return data
-
         next_round_url = _next_round_url(current_round.source_url, current_round.number)
         if next_round_url is None:
             return data
 
         try:
             page = await self._page_client.fetch(next_round_url)
-            next_round_data = self._parser.parse_round_page(
+            next_page_data = self._parser.parse_league_page(
                 page.html,
                 url=page.url,
                 league_code=data.league.code,
@@ -195,11 +189,20 @@ class LeagueSyncService:
         except Exception:
             return data
 
-        next_round = next_round_data.round
-        if next_round.number != next_round_number or not next_round.matches:
+        source_rounds = _iter_source_rounds(data)
+        existing_numbers = {round_.number for round_ in source_rounds}
+        new_rounds = tuple(
+            round_
+            for round_ in _iter_source_rounds(next_page_data)
+            if round_.matches and round_.number not in existing_numbers
+        )
+        has_next_round = next_round_number in existing_numbers or any(
+            round_.number == next_round_number for round_ in new_rounds
+        )
+        if not has_next_round:
             return data
 
-        return replace(data, rounds=(*_iter_source_rounds(data), next_round))
+        return replace(data, rounds=(*source_rounds, *new_rounds))
 
     async def _enrich_match_goal_events(self, data: LeaguePageData) -> LeaguePageData:
         fetched_goal_events: dict[str, tuple[ParsedGoalEvent, ...]] = {}
