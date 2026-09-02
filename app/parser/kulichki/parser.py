@@ -468,32 +468,60 @@ def _extract_standings(soup: BeautifulSoup) -> list[ParsedStandingRow]:
         return rows
 
     for table in soup.find_all("table"):
-        table_text = table.get_text(" ", strip=True).lower()
-        if ("очк" not in table_text and "points" not in table_text) or "клуб" not in table_text:
+        if not _looks_like_standings_table(table):
             continue
         for tr in table.find_all("tr"):
-            cells = [cell.get_text(" ", strip=True) for cell in tr.find_all(["td", "th"], recursive=False)]
-            if len(cells) < 8:
+            cells = [
+                _clean_team_name(cell.get_text(" ", strip=True))
+                for cell in tr.find_all(["td", "th"], recursive=False)
+            ]
+            cells = [cell for cell in cells if cell]
+            if len(cells) < 4:
                 continue
             position = _parse_int(cells[0])
             if position is None:
                 continue
+            goals_for, goals_against = _parse_goals_pair(cells[6]) if len(cells) >= 8 else (None, None)
             rows.append(
                 ParsedStandingRow(
                     position=position,
                     team_name=_clean_team_name(cells[1]),
                     played=_parse_int(cells[2]),
-                    wins=_parse_int(cells[3]),
-                    draws=_parse_int(cells[4]),
-                    losses=_parse_int(cells[5]),
-                    goals_for=_parse_goals_pair(cells[6])[0],
-                    goals_against=_parse_goals_pair(cells[6])[1],
-                    goal_difference=_parse_goal_difference(cells[6]),
+                    wins=_parse_int(cells[3]) if len(cells) >= 8 else None,
+                    draws=_parse_int(cells[4]) if len(cells) >= 8 else None,
+                    losses=_parse_int(cells[5]) if len(cells) >= 8 else None,
+                    goals_for=goals_for,
+                    goals_against=goals_against,
+                    goal_difference=_parse_goal_difference(cells[6]) if len(cells) >= 8 else None,
                     points=_parse_int(cells[-1]),
                 )
             )
 
     return rows
+
+
+def _looks_like_standings_table(table: Tag) -> bool:
+    for tr in table.find_all("tr"):
+        cells = [
+            _normalize_standings_header_cell(cell.get_text(" ", strip=True))
+            for cell in tr.find_all(["td", "th"], recursive=False)
+        ]
+        cells = [cell for cell in cells if cell]
+        if not cells:
+            continue
+        has_team_header = any(cell in {"клуб", "команда", "team"} for cell in cells)
+        has_points_header = any(cell in {"о", "очк", "очки", "points"} or cell.startswith("очк") for cell in cells)
+        if has_team_header and has_points_header:
+            return True
+
+    table_text = table.get_text(" ", strip=True).lower()
+    has_team_word = any(marker in table_text for marker in ("клуб", "команда", "team"))
+    has_points_word = any(marker in table_text for marker in ("очк", "points"))
+    return has_team_word and has_points_word
+
+
+def _normalize_standings_header_cell(value: str) -> str:
+    return _clean_team_name(value).replace("№", "n").lower()
 
 
 def _select_text(row: Tag, selector: str) -> str:

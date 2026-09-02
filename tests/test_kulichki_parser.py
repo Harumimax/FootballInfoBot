@@ -63,6 +63,33 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(data.current_round.source_url, "https://football.kulichki.net/league/2027/1/")
         self.assertEqual(len(data.current_round.matches), 2)
 
+    def test_parse_tournament_page_extracts_short_header_standings(self) -> None:
+        html = """
+        <html><body>
+        <h1>ЛИГА ЧЕМПИОНОВ - 2026/2027</h1>
+        <p>Общий этап</p>
+        <table>
+          <tr><td>N</td><td></td><td>Команда</td><td>И</td><td>В</td><td>Н</td><td>П</td><td>М</td><td>О</td></tr>
+          <tr><td>1</td><td><img src="/flags/fr.gif"></td><td><a href="/teams/psg.htm">ПСЖ</a></td><td>0</td><td>0</td><td>0</td><td>0</td><td>-</td><td>0</td></tr>
+          <tr><td>2</td><td><img src="/flags/de.gif"></td><td><a href="/teams/bayern.htm">Бавария</a></td><td>0</td><td>0</td><td>0</td><td>0</td><td>-</td><td>0</td></tr>
+        </table>
+        </body></html>
+        """
+
+        data = self.parser.parse_league_page(
+            html,
+            url="https://football.kulichki.net/league/",
+            league_code="league",
+            league_name="Лига чемпионов",
+        )
+
+        self.assertEqual(data.season_label, "2026/2027")
+        self.assertEqual(len(data.standings), 2)
+        self.assertEqual(data.standings[0].team_name, "ПСЖ")
+        self.assertEqual(data.standings[0].played, 0)
+        self.assertEqual(data.standings[0].points, 0)
+        self.assertEqual(data.standings[1].team_name, "Бавария")
+
     def test_parse_round_page_extracts_round_matches_from_table(self) -> None:
         html = _read_fixture("spain_round.html")
 
