@@ -9,7 +9,6 @@ from app.parser.kulichki import KulichkiParser
 from app.services.updates import LeagueSource, LeagueSyncService, ParserRunDraft, SaveLeaguePageResult
 from app.storage.repositories import normalize_team_name
 
-
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "kulichki"
 
 
@@ -109,6 +108,66 @@ class LeagueSyncServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "success")
         self.assertEqual(result.current_round_number, 3)
         self.assertEqual(result.parsed_matches, 14)
+
+    async def test_sync_league_fetches_next_round_when_current_round_is_finished(self) -> None:
+        league_url = "https://football.kulichki.net/fnl/"
+        next_round_url = "https://football.kulichki.net/fnl/2027/10/"
+        league_html = """
+        <html>
+            <body data-current-round="9">
+                <h1>ФНЛ 2026/2027</h1>
+                <section data-current-round="9">
+                    <h2>9-й тур</h2>
+                    <div data-match>
+                        <span data-match-date>30.08.2026</span>
+                        <span data-match-time>19:00</span>
+                        <span data-home-team>Арсенал</span>
+                        <span data-score>1:0</span>
+                        <span data-away-team>Ротор</span>
+                        <span data-status>завершен</span>
+                    </div>
+                </section>
+            </body>
+        </html>
+        """
+        next_round_html = """
+        <html>
+            <body data-current-round="10">
+                <h1>ФНЛ 2026/2027</h1>
+                <section>
+                    <h2>10-й тур</h2>
+                    <div data-match>
+                        <span data-match-date>05.09.2026</span>
+                        <span data-match-time>17:00</span>
+                        <span data-home-team>КАМАЗ</span>
+                        <span data-score></span>
+                        <span data-away-team>Урал</span>
+                        <span data-status>анонс</span>
+                    </div>
+                </section>
+            </body>
+        </html>
+        """
+        client = FakePageClient(
+            pages_by_url={
+                league_url: FetchedPage(url=league_url, html=league_html, status_code=200),
+                next_round_url: FetchedPage(url=next_round_url, html=next_round_html, status_code=200),
+            }
+        )
+        repository = FakeFootballDataRepository()
+        service = LeagueSyncService(
+            page_client=client,
+            parser=KulichkiParser(base_url="https://football.kulichki.net"),
+            repository=repository,
+            league_sources=(LeagueSource(code="fnl", name="Россия", url=league_url),),
+        )
+
+        result = await service.sync_league("fnl")
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.parsed_matches, 2)
+        self.assertEqual(client.fetched_urls, [league_url, next_round_url])
+        self.assertEqual([round_.number for round_ in repository.saved_pages[0].rounds], [9, 10])
 
     async def test_sync_league_enriches_finished_matches_with_goal_events(self) -> None:
         league_html = _read_fixture("spain_league_live.html")
@@ -215,7 +274,6 @@ class LeagueSyncServiceTest(unittest.IsolatedAsyncioTestCase):
 
 def _read_fixture(name: str) -> str:
     return (FIXTURES_DIR / name).read_text(encoding="utf-8")
-
 
 if __name__ == "__main__":
     unittest.main()

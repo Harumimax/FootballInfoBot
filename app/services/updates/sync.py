@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.parser.clients.http import FetchedPage
-from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedMatch, ParsedRound
+from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedMatch, ParsedRound, RoundPageData
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,9 @@ class PageClient(Protocol):
 
 class LeaguePageParser(Protocol):
     def parse_league_page(self, html: str, *, url: str, league_code: str, league_name: str) -> LeaguePageData:
+        pass
+
+    def parse_round_page(self, html: str, *, url: str, league_code: str, league_name: str) -> RoundPageData:
         pass
 
     def parse_match_page(self, html: str, *, url: str) -> tuple[ParsedGoalEvent, ...]:
@@ -116,6 +119,7 @@ class LeagueSyncService:
                 league_code=league.code,
                 league_name=league.name,
             )
+            parsed_data = await self._include_next_round_if_current_finished(parsed_data)
             parsed_data = await self._enrich_match_goal_events(parsed_data)
             save_result = await self._repository.save_league_page_data(parsed_data)
             finished_at = datetime.now(tz=None).astimezone()
@@ -167,6 +171,36 @@ class LeagueSyncService:
                 error_message=str(error),
             )
 
+    async def _include_next_round_if_current_finished(self, data: LeaguePageData) -> LeaguePageData:
+        current_round = data.current_round
+        if current_round is None or not _is_round_finished(current_round):
+            return data
+
+        next_round_number = current_round.number + 1
+        if any(round_.number == next_round_number for round_ in data.rounds):
+            return data
+
+        next_round_url = _next_round_url(current_round.source_url, current_round.number)
+        if next_round_url is None:
+            return data
+
+        try:
+            page = await self._page_client.fetch(next_round_url)
+            next_round_data = self._parser.parse_round_page(
+                page.html,
+                url=page.url,
+                league_code=data.league.code,
+                league_name=data.league.name,
+            )
+        except Exception:
+            return data
+
+        next_round = next_round_data.round
+        if next_round.number != next_round_number or not next_round.matches:
+            return data
+
+        return replace(data, rounds=(*_iter_source_rounds(data), next_round))
+
     async def _enrich_match_goal_events(self, data: LeaguePageData) -> LeaguePageData:
         fetched_goal_events: dict[str, tuple[ParsedGoalEvent, ...]] = {}
 
@@ -192,6 +226,29 @@ class LeagueSyncService:
             current_round = next((round_ for round_ in rounds if round_.number == current_round.number), current_round)
 
         return replace(data, current_round=current_round, rounds=rounds)
+
+
+def _is_round_finished(round_: ParsedRound) -> bool:
+    if not round_.matches:
+        return False
+    return all(match.status in {"finished", "postponed", "cancelled"} for match in round_.matches)
+
+
+def _next_round_url(source_url: str | None, current_round_number: int) -> str | None:
+    if source_url is None:
+        return None
+    current_part = f"/{current_round_number}/"
+    if current_part not in source_url:
+        return None
+    return source_url.replace(current_part, f"/{current_round_number + 1}/", 1)
+
+
+def _iter_source_rounds(data: LeaguePageData) -> tuple[ParsedRound, ...]:
+    if data.rounds:
+        return data.rounds
+    if data.current_round is not None:
+        return (data.current_round,)
+    return ()
 
 
 def _should_fetch_goal_events(match: ParsedMatch) -> bool:

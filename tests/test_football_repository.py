@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow
 from app.storage.models import League, MatchGoalEvent, Round, StandingRow
 from app.storage.repositories import FootballDataSqlAlchemyRepository
-from app.storage.repositories.football import _filter_nearby_catch_up_rounds
+from app.storage.repositories.football import _filter_nearby_catch_up_rounds, _select_finished_active_rounds
 
 
 class FakeAsyncSession:
@@ -15,11 +15,13 @@ class FakeAsyncSession:
         self.added: list[object] = []
         self._next_id = 1
         self.flush_count = 0
+        self.executed_statements: list[object] = []
 
     async def scalar(self, statement: object) -> None:
         return None
 
     async def execute(self, statement: object) -> tuple:
+        self.executed_statements.append(statement)
         return ()
 
     def add(self, entity: object) -> None:
@@ -108,6 +110,40 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.round, upcoming_round)
         self.assertEqual(result.rounds, (upcoming_round,))
 
+    def test_select_finished_active_rounds_prefers_next_round(self) -> None:
+        finished_round = ParsedRound(
+            number=9,
+            source_url="https://football.kulichki.net/fnl/2027/9/",
+            matches=(
+                ParsedMatch(
+                    home_team="Арсенал",
+                    away_team="Ротор",
+                    scheduled_at=datetime(2026, 8, 30, 19, 0),
+                    home_score=1,
+                    away_score=0,
+                    status="finished",
+                ),
+            ),
+        )
+        next_round = ParsedRound(
+            number=10,
+            source_url="https://football.kulichki.net/fnl/2027/10/",
+            matches=(
+                ParsedMatch(
+                    home_team="КАМАЗ",
+                    away_team="Урал",
+                    scheduled_at=datetime(2026, 9, 5, 17, 0),
+                    home_score=None,
+                    away_score=None,
+                    status="scheduled",
+                ),
+            ),
+        )
+
+        result = _select_finished_active_rounds((finished_round,), next_round)
+
+        self.assertEqual(result, (next_round,))
+
     def test_filter_nearby_catch_up_rounds_keeps_only_rounds_near_active_dates(self) -> None:
         active_round = ParsedRound(
             number=1,
@@ -155,6 +191,35 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         result = _filter_nearby_catch_up_rounds((active_round,), (future_round, catch_up_round))
 
         self.assertEqual(result, (catch_up_round,))
+
+
+    async def test_save_league_page_data_deactivates_previous_active_rounds(self) -> None:
+        session = FakeAsyncSession()
+        repository = FootballDataSqlAlchemyRepository(session)
+        data = LeaguePageData(
+            league=ParsedLeague(code="fnl", name="Россия", source_url="https://football.kulichki.net/fnl/"),
+            season_label="2026/2027",
+            source_season_key="2027",
+            current_round=ParsedRound(
+                number=10,
+                source_url="https://football.kulichki.net/fnl/2027/10/",
+                matches=(),
+            ),
+            standings=(),
+            rounds=(
+                ParsedRound(
+                    number=10,
+                    source_url="https://football.kulichki.net/fnl/2027/10/",
+                    matches=(),
+                ),
+            ),
+        )
+
+        await repository.save_league_page_data(data)
+
+        update_statements = [statement for statement in session.executed_statements if "UPDATE rounds" in str(statement)]
+        self.assertEqual(len(update_statements), 1)
+        self.assertIn("rounds.round_number !=", str(update_statements[0]))
 
     async def test_save_league_page_data_persists_all_visible_rounds(self) -> None:
         session = FakeAsyncSession()
@@ -328,7 +393,6 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(added_goal_events[1].is_own_goal)
         self.assertEqual(added_goal_events[2].minute, "82")
         self.assertEqual(added_goal_events[2].scorer_name, "Фермин Лопес")
-
 
 if __name__ == "__main__":
     unittest.main()

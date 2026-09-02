@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import delete, desc, func, or_, select
+from sqlalchemy import delete, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -43,7 +43,6 @@ from app.storage.models import (
     User,
 )
 
-
 CATCH_UP_ROUND_LOOKBACK_DAYS = 7
 
 
@@ -66,6 +65,9 @@ class FootballDataSqlAlchemyRepository:
         created_matches = 0
         updated_matches = 0
         created_change_events = 0
+
+        if data.current_round is not None:
+            await self._deactivate_previous_active_rounds(league, season, data.current_round.number)
 
         for parsed_round in _iter_league_rounds(data):
             round_ = await self._upsert_round(
@@ -560,6 +562,19 @@ class FootballDataSqlAlchemyRepository:
         await self._session.flush()
         return season
 
+    async def _deactivate_previous_active_rounds(self, league: League, season: Season, current_round_number: int) -> None:
+        await self._session.execute(
+            update(Round)
+            .where(
+                Round.league_id == league.id,
+                Round.season_id == season.id,
+                Round.status == "active",
+                Round.round_number != current_round_number,
+            )
+            .values(status="planned")
+        )
+        await self._session.flush()
+
     async def _upsert_round(self, league: League, season: Season, parsed_round: ParsedRound, *, is_current: bool) -> Round:
         statement = select(Round).where(
             Round.season_id == season.id,
@@ -806,6 +821,10 @@ class FootballDataSqlAlchemyRepository:
             .order_by(desc(Round.round_number))
         )
         active_rounds = await self._load_rounds_with_matches(active_statement)
+        next_round = await self._load_next_planned_round(league, season)
+        if active_rounds and all(_is_round_completed(round_) for round_ in active_rounds):
+            return _select_finished_active_rounds(active_rounds, next_round)
+
         if active_rounds:
             catch_up_statement = (
                 select(Round)
@@ -821,6 +840,9 @@ class FootballDataSqlAlchemyRepository:
             catch_up_rounds = _filter_nearby_catch_up_rounds(active_rounds, catch_up_rounds)
             return (*active_rounds, *catch_up_rounds)
 
+        return (next_round,) if next_round is not None else ()
+
+    async def _load_next_planned_round(self, league: League, season: Season) -> ParsedRound | None:
         next_round_statement = (
             select(Round)
             .join(Match, Match.round_id == Round.id)
@@ -836,14 +858,14 @@ class FootballDataSqlAlchemyRepository:
         )
         next_round = await self._session.scalar(next_round_statement)
         if next_round is None:
-            return ()
+            return None
 
         parsed_round = ParsedRound(
             number=next_round.round_number,
             source_url=next_round.source_url,
             matches=await self._load_round_matches(next_round),
         )
-        return (parsed_round,) if parsed_round.matches else ()
+        return parsed_round if parsed_round.matches else None
 
     async def _load_rounds_with_matches(self, statement) -> tuple[ParsedRound, ...]:  # noqa: ANN001
         result = await self._session.scalars(statement)
@@ -969,6 +991,19 @@ def normalize_team_name(source_name: str) -> str:
 def normalize_team_display_name(source_name: str) -> str:
     clean_name = re.sub(r"\s+", " ", source_name.replace("\xa0", " ")).strip()
     return re.sub(r"\s+\([^()]+\)\s*$", "", clean_name).strip()
+
+
+def _is_round_completed(round_: ParsedRound) -> bool:
+    if not round_.matches:
+        return False
+    return all(match.status in {"finished", "postponed", "cancelled"} for match in round_.matches)
+
+
+def _select_finished_active_rounds(
+    active_rounds: tuple[ParsedRound, ...],
+    next_round: ParsedRound | None,
+) -> tuple[ParsedRound, ...]:
+    return (next_round,) if next_round is not None else active_rounds
 
 
 def _filter_nearby_catch_up_rounds(
