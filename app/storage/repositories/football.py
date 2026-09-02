@@ -822,9 +822,6 @@ class FootballDataSqlAlchemyRepository:
         )
         active_rounds = await self._load_rounds_with_matches(active_statement)
         next_round = await self._load_next_planned_round(league, season)
-        if active_rounds and all(_is_round_completed(round_) for round_ in active_rounds):
-            return _select_finished_active_rounds(active_rounds, next_round)
-
         if active_rounds:
             catch_up_statement = (
                 select(Round)
@@ -838,6 +835,13 @@ class FootballDataSqlAlchemyRepository:
             )
             catch_up_rounds = await self._load_rounds_with_matches(catch_up_statement)
             catch_up_rounds = _filter_nearby_catch_up_rounds(active_rounds, catch_up_rounds)
+            if all(_is_round_completed(round_) for round_ in active_rounds):
+                return _select_finished_active_rounds(
+                    active_rounds,
+                    catch_up_rounds,
+                    next_round,
+                    current_date=datetime.now(tz=None).astimezone().date(),
+                )
             return (*active_rounds, *catch_up_rounds)
 
         return (next_round,) if next_round is not None else ()
@@ -1001,9 +1005,21 @@ def _is_round_completed(round_: ParsedRound) -> bool:
 
 def _select_finished_active_rounds(
     active_rounds: tuple[ParsedRound, ...],
+    catch_up_rounds: tuple[ParsedRound, ...],
     next_round: ParsedRound | None,
+    *,
+    current_date: date,
 ) -> tuple[ParsedRound, ...]:
-    return (next_round,) if next_round is not None else active_rounds
+    if next_round is None:
+        return (*active_rounds, *catch_up_rounds)
+    if _round_starts_on_or_before(next_round, current_date):
+        return (next_round,)
+    return (*active_rounds, *catch_up_rounds, next_round)
+
+
+def _round_starts_on_or_before(round_: ParsedRound, current_date: date) -> bool:
+    match_dates = [match.scheduled_at.date() for match in round_.matches if match.scheduled_at is not None]
+    return bool(match_dates) and min(match_dates) <= current_date
 
 
 def _filter_nearby_catch_up_rounds(
