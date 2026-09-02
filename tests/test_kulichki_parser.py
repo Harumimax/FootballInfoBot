@@ -90,6 +90,40 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(data.standings[0].points, 0)
         self.assertEqual(data.standings[1].team_name, "Бавария")
 
+    def test_parse_tournament_page_extracts_compact_upcoming_round_matches(self) -> None:
+        html = """
+        <html><body>
+        <h1>ЛИГА ЕВРОПЫ - 2026/2027</h1>
+        <table>
+          <tr><td colspan="2"><b>1-й тур</b></td></tr>
+          <tr>
+            <td>16.09 - 19:45</td>
+            <td><a href="/teams/ararat.htm">Арарат-Армения (Армения)</a> - <a href="/teams/sparta.htm">Спарта (Чехия)</a></td>
+          </tr>
+          <tr>
+            <td>17.09 - 22:00</td>
+            <td><a href="/teams/milan.htm">Милан (Италия)</a> - <a href="/teams/porto.htm">Порту (Португалия)</a></td>
+          </tr>
+        </table>
+        </body></html>
+        """
+
+        data = self.parser.parse_league_page(
+            html,
+            url="https://football.kulichki.net/uefa_cup/",
+            league_code="uefa_cup",
+            league_name="Лига Европы",
+        )
+
+        self.assertIsNotNone(data.current_round)
+        assert data.current_round is not None
+        self.assertEqual(data.current_round.number, 1)
+        self.assertEqual(len(data.current_round.matches), 2)
+        self.assertEqual(data.current_round.matches[0].home_team, "Арарат-Армения (Армения)")
+        self.assertEqual(data.current_round.matches[0].away_team, "Спарта (Чехия)")
+        self.assertEqual(data.current_round.matches[0].scheduled_at.strftime("%Y-%m-%d %H:%M"), "2026-09-16 19:45")
+        self.assertEqual(data.current_round.matches[0].status, "scheduled")
+
     def test_parse_tournament_page_deduplicates_repeated_standings_rows(self) -> None:
         html = """
         <html><body>

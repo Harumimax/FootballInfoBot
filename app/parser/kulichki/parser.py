@@ -22,7 +22,7 @@ GOAL_EVENT_RE = re.compile(
     re.IGNORECASE,
 )
 DATE_TIME_RE = re.compile(
-    r"(?P<day>\d{1,2})[.\-/](?P<month>\d{1,2})(?:[.\-/](?P<year>\d{2,4}))?\s+"
+    r"(?P<day>\d{1,2})[.\-/](?P<month>\d{1,2})(?:[.\-/](?P<year>\d{2,4}))?\s+(?:[-–]\s*)?"
     r"(?P<hour>\d{1,2})[:\-](?P<minute>\d{2})"
 )
 RUSSIAN_DATE_RE = re.compile(r"(?P<day>\d{1,2})\s+(?P<month>[а-яё]+)", re.IGNORECASE)
@@ -334,7 +334,7 @@ def _parse_match_cells(
     season_start_year: int | None,
     season_end_year: int | None,
 ) -> ParsedMatch | None:
-    if len(cells) < 3:
+    if len(cells) < 2:
         return None
 
     home_team = ""
@@ -355,6 +355,9 @@ def _parse_match_cells(
             season_start_year=season_start_year,
             season_end_year=season_end_year,
         )
+    elif _looks_like_compact_match_row(cells):
+        home_team, away_team = _split_team_pair(cells[1])
+        scheduled_at = _parse_datetime(cells[0], default_year=season_start_year)
     else:
         joined = " ".join(cells)
         if not DATE_TIME_RE.search(joined):
@@ -390,6 +393,19 @@ def _looks_like_kulichki_match_row(cells: list[str]) -> bool:
     if len(cells) != 4:
         return False
     return RUSSIAN_DATE_RE.fullmatch(cells[0].strip()) is not None and " - " in cells[1]
+
+
+def _looks_like_compact_match_row(cells: list[str]) -> bool:
+    if len(cells) < 2:
+        return False
+    return DATE_TIME_RE.search(cells[0]) is not None and bool(_split_team_pair(cells[1])[0])
+
+
+def _split_team_pair(value: str) -> tuple[str, str]:
+    parts = re.split(r"\s+-\s+", value, maxsplit=1)
+    if len(parts) != 2:
+        return "", ""
+    return _clean_team_name(parts[0]), _clean_team_name(parts[1])
 
 
 def _extract_team_links(row: Tag) -> list[str]:
@@ -645,7 +661,7 @@ def _extract_match_source_link(row: Tag, *, page_url: str) -> str | None:
         if "/teams/" in href or "/trans/" in href:
             continue
         return urljoin(page_url, href)
-    return _extract_first_link(row, page_url=page_url)
+    return None
 
 
 def _clean_team_name(value: str) -> str:
