@@ -43,6 +43,8 @@ RUSSIAN_MONTHS = {
     "ноября": 11,
     "декабря": 12,
 }
+MAX_GOAL_EVENTS = 10
+GOAL_EVENT_SCAN_LINES = MAX_GOAL_EVENTS * 3
 
 
 class KulichkiParser:
@@ -640,12 +642,26 @@ def _parse_goal_difference(value: str) -> int | None:
 def _extract_goal_events(soup: BeautifulSoup) -> list[ParsedGoalEvent]:
     lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines() if line.strip()]
     for index, line in enumerate(lines):
-        if SCORE_RE.search(line) is None:
+        score_match = SCORE_RE.search(line)
+        if score_match is None:
             continue
         if " - " not in line:
             continue
-        events = _parse_goal_events_line(" ".join(lines[index + 1 : index + 8]))
+        events = _parse_goal_events_line(
+            " ".join(lines[index + 1 : index + 1 + GOAL_EVENT_SCAN_LINES])
+        )[:MAX_GOAL_EVENTS]
         if events:
+            final_score = f"{score_match.group('home')}:{score_match.group('away')}"
+            final_event_index = next(
+                (
+                    event_index
+                    for event_index, event in enumerate(events)
+                    if event.score_after == final_score
+                ),
+                None,
+            )
+            if final_event_index is not None:
+                return events[: final_event_index + 1]
             return events
     return []
 

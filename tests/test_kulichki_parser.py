@@ -361,6 +361,36 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(goals[1].scorer_name, "Фермин Лопес")
         self.assertEqual(goals[1].score_after, "2:0")
 
+    def test_parse_match_page_extracts_up_to_ten_goal_events(self) -> None:
+        html = """
+        <html><body>
+        <p>Команда А - Команда Б - 6:4</p>
+        <p>
+        Игрок Один, 2 (1:0).<br>
+        Игрок Два, 8 (1:1).<br>
+        Игрок Три, 15 (2:1).<br>
+        Игрок Четыре, 28 (2:2).<br>
+        Игрок Пять, 39 (3:2).<br>
+        Игрок Шесть, 48 (4:2).<br>
+        Игрок Семь, 61 (4:3).<br>
+        Игрок Восемь, 74 (5:3).<br>
+        Игрок Девять, 86 (5:4).<br>
+        Игрок Десять, 90+6 (6:4).<br>
+        Лишний Игрок, 99 (7:4).
+        </p>
+        </body></html>
+        """
+
+        goals = self.parser.parse_match_page(
+            html,
+            url="https://football.kulichki.net/england/2027/7/example.htm",
+        )
+
+        self.assertEqual(len(goals), 10)
+        self.assertEqual(goals[-1].minute, "90+6")
+        self.assertEqual(goals[-1].scorer_name, "Игрок Десять")
+        self.assertEqual(goals[-1].score_after, "6:4")
+
     def test_parse_match_page_extracts_own_goals_from_review(self) -> None:
         html = """
         <html><body>
