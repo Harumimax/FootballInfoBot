@@ -213,12 +213,51 @@ def _format_match(match: ParsedMatch) -> str:
 def _format_match_lines(match: ParsedMatch, *, include_goal_events: bool) -> list[str]:
     lines = [_format_match(match)]
     if include_goal_events:
-        lines.extend(_format_goal_event(event) for event in match.goal_events)
+        lines.extend(_format_goal_events(match))
     return lines
 
 
-def _format_goal_event(event: ParsedGoalEvent) -> str:
-    suffix = " (АГ)" if event.is_own_goal else ""
+def _format_goal_events(match: ParsedMatch) -> list[str]:
+    lines: list[str] = []
+    previous_score = (0, 0)
+
+    for event in match.goal_events:
+        score_after = _parse_goal_event_score(event.score_after)
+        credited_team: str | None = None
+        if score_after is not None:
+            if score_after == (previous_score[0] + 1, previous_score[1]):
+                credited_team = match.home_team
+            elif score_after == (previous_score[0], previous_score[1] + 1):
+                credited_team = match.away_team
+            previous_score = score_after
+
+        lines.append(_format_goal_event(event, credited_team=credited_team))
+
+    return lines
+
+
+def _parse_goal_event_score(value: str | None) -> tuple[int, int] | None:
+    if value is None:
+        return None
+
+    parts = value.replace("-", ":").split(":")
+    if len(parts) != 2:
+        return None
+
+    home_score, away_score = (part.strip() for part in parts)
+    if not home_score.isdigit() or not away_score.isdigit():
+        return None
+    return int(home_score), int(away_score)
+
+
+def _format_goal_event(event: ParsedGoalEvent, *, credited_team: str | None) -> str:
+    annotations: list[str] = []
+    if event.is_own_goal:
+        annotations.append("АГ")
+    if credited_team is not None:
+        annotations.append(credited_team)
+
+    suffix = f" ({', '.join(escape(annotation) for annotation in annotations)})" if annotations else ""
     return f"  ⚽ {escape(event.minute)} {escape(event.scorer_name)}{suffix}"
 
 

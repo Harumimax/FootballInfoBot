@@ -418,7 +418,7 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("🇪🇸 <b>Испания</b>", sender.sent_notifications[0].text)
         self.assertIn("⭐ <b>Барселона</b>", sender.sent_notifications[1].text)
         self.assertIn("🇪🇸 Испания", sender.sent_notifications[1].text)
-        self.assertIn("13 Таррега (АГ)", sender.sent_notifications[1].text)
+        self.assertIn("13 Таррега (АГ, Барселона)", sender.sent_notifications[1].text)
 
     async def test_after_matchday_push_includes_today_matches_with_goal_events(self) -> None:
         rounds = (_round_with_goal_events(), _catch_up_round())
@@ -446,9 +446,9 @@ class PushNotificationServiceTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("📅 <b>Матчи сегодня</b>", sender.sent_notifications[0].text)
         self.assertIn("27.08 22:00 Барселона <b>3:0</b> Атлетик", sender.sent_notifications[0].text)
-        self.assertIn("13 Таррега (АГ)", sender.sent_notifications[0].text)
-        self.assertIn("37 Рафинья", sender.sent_notifications[0].text)
-        self.assertIn("82 Фермин Лопес", sender.sent_notifications[0].text)
+        self.assertIn("13 Таррега (АГ, Барселона)", sender.sent_notifications[0].text)
+        self.assertIn("37 Рафинья (Барселона)", sender.sent_notifications[0].text)
+        self.assertIn("82 Фермин Лопес (Барселона)", sender.sent_notifications[0].text)
 
     async def test_after_matchday_push_sends_as_is_at_03_when_there_are_changes(self) -> None:
         repository = FakePushRepository(

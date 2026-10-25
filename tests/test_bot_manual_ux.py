@@ -210,6 +210,51 @@ class BotManualUxTest(unittest.TestCase):
     def test_render_round_state_handles_missing_data(self) -> None:
         self.assertEqual(render_round_state("Испания", None), NO_DATA_MESSAGE)
 
+    def test_matchday_goal_events_include_credited_team(self) -> None:
+        match_date = datetime(2026, 10, 25).date()
+        round_ = ParsedRound(
+            number=8,
+            source_url="https://football.kulichki.net/england/2027/8/",
+            matches=(
+                ParsedMatch(
+                    home_team="Ливерпуль",
+                    away_team="Брайтон",
+                    scheduled_at=datetime(2026, 10, 25, 20, 0),
+                    home_score=2,
+                    away_score=1,
+                    status="finished",
+                    goal_events=(
+                        ParsedGoalEvent(
+                            minute="17",
+                            scorer_name="Гросс",
+                            score_after="1:0",
+                            position=1,
+                            is_own_goal=True,
+                        ),
+                        ParsedGoalEvent(
+                            minute="21",
+                            scorer_name="Исак",
+                            score_after="2:0",
+                            position=2,
+                        ),
+                        ParsedGoalEvent(
+                            minute="74",
+                            scorer_name="Митома",
+                            score_after="2:1",
+                            position=3,
+                        ),
+                    ),
+                    goal_events_loaded=True,
+                ),
+            ),
+        )
+
+        message = render_matchday_rounds_state("Англия", (round_,), match_date)
+
+        self.assertIn("⚽ 17 Гросс (АГ, Ливерпуль)", message)
+        self.assertIn("⚽ 21 Исак (Ливерпуль)", message)
+        self.assertIn("⚽ 74 Митома (Брайтон)", message)
+
     def test_render_standings_is_compact(self) -> None:
         table = StandingTableView(
             league=LeagueView(code="spain", name="Испания"),
