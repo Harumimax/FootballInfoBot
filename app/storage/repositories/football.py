@@ -609,6 +609,13 @@ class FootballDataSqlAlchemyRepository:
     ) -> MatchUpsertResult:
         home_team = await self._upsert_team(parsed_match.home_team)
         away_team = await self._upsert_team(parsed_match.away_team)
+        await self._delete_legacy_compact_match_duplicate(
+            league,
+            season,
+            round_,
+            parsed_match,
+            home_team=home_team,
+        )
 
         statement = select(Match).where(
             Match.source == "kulichki",
@@ -655,6 +662,48 @@ class FootballDataSqlAlchemyRepository:
 
         await self._session.flush()
         return MatchUpsertResult(match=match, created=False, changed=changed, finished_now=finished_now)
+
+    async def _delete_legacy_compact_match_duplicate(
+        self,
+        league: League,
+        season: Season,
+        round_: Round,
+        parsed_match: ParsedMatch,
+        *,
+        home_team: Team,
+    ) -> None:
+        if (
+            parsed_match.scheduled_at is None
+            or parsed_match.home_score is None
+            or parsed_match.away_score is None
+        ):
+            return
+
+        legacy_away_name = (
+            f"{parsed_match.away_team} - {parsed_match.home_score}:{parsed_match.away_score}"
+        )
+        legacy_away_team = await self._session.scalar(
+            select(Team).where(
+                Team.source == "kulichki",
+                Team.normalized_name == normalize_team_name(legacy_away_name),
+            )
+        )
+        if legacy_away_team is None:
+            return
+
+        await self._session.execute(
+            delete(Match).where(
+                Match.source == "kulichki",
+                Match.league_id == league.id,
+                Match.season_id == season.id,
+                Match.round_id == round_.id,
+                Match.home_team_id == home_team.id,
+                Match.away_team_id == legacy_away_team.id,
+                Match.scheduled_at == parsed_match.scheduled_at,
+                Match.home_score.is_(None),
+                Match.away_score.is_(None),
+            )
+        )
 
     async def _replace_match_goal_events(self, match: Match, parsed_match: ParsedMatch) -> None:
         await self._session.execute(delete(MatchGoalEvent).where(MatchGoalEvent.match_id == match.id))

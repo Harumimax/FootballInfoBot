@@ -124,6 +124,37 @@ class KulichkiParserTest(unittest.TestCase):
         self.assertEqual(data.current_round.matches[0].scheduled_at.strftime("%Y-%m-%d %H:%M"), "2026-09-16 19:45")
         self.assertEqual(data.current_round.matches[0].status, "scheduled")
 
+    def test_parse_tournament_page_extracts_compact_finished_match_score(self) -> None:
+        html = """
+        <html><body>
+        <h1>ЛИГА ЧЕМПИОНОВ - 2026/2027</h1>
+        <table>
+          <tr><td colspan="2"><b>3-й тур</b></td></tr>
+          <tr>
+            <td>20.10 - 22:00</td>
+            <td><a href="/teams/psg.htm">ПСЖ</a> - <a href="/teams/barcelona.htm">Барселона (Испания)</a> - 4:2</td>
+          </tr>
+        </table>
+        </body></html>
+        """
+
+        data = self.parser.parse_league_page(
+            html,
+            url="https://football.kulichki.net/league/",
+            league_code="league",
+            league_name="Лига чемпионов",
+        )
+
+        self.assertIsNotNone(data.current_round)
+        assert data.current_round is not None
+        self.assertEqual(len(data.current_round.matches), 1)
+        match = data.current_round.matches[0]
+        self.assertEqual(match.home_team, "ПСЖ")
+        self.assertEqual(match.away_team, "Барселона (Испания)")
+        self.assertEqual(match.home_score, 4)
+        self.assertEqual(match.away_score, 2)
+        self.assertEqual(match.status, "finished")
+
     def test_parse_tournament_page_deduplicates_repeated_standings_rows(self) -> None:
         html = """
         <html><body>

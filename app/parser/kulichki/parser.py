@@ -13,6 +13,9 @@ SOURCE_NAME = "kulichki"
 ROUND_TITLE_RE = re.compile(r"(?P<number>\d+)\s*[-–]?\s*(?:й|ый|ой)?\s*тур", re.IGNORECASE)
 SEASON_RE = re.compile(r"(?P<start>\d{4})\s*/\s*(?P<end>\d{4})")
 SCORE_RE = re.compile(r"(?P<home>\d+)\s*[:\-]\s*(?P<away>\d+)")
+COMPACT_RESULT_RE = re.compile(
+    r"^(?P<teams>.+)\s+-\s+(?P<score>\d+\s*[:\-]\s*\d+)\s*$"
+)
 TIME_RE = re.compile(r"(?P<hour>\d{1,2})[:\-](?P<minute>\d{2})")
 GOAL_EVENT_RE = re.compile(
     r"(?P<scorer>[А-ЯЁA-Z][^.,\n]+?)\s*,\s*"
@@ -356,7 +359,7 @@ def _parse_match_cells(
             season_end_year=season_end_year,
         )
     elif _looks_like_compact_match_row(cells):
-        home_team, away_team = _split_team_pair(cells[1])
+        home_team, away_team, score_text = _split_compact_match(cells[1])
         scheduled_at = _parse_datetime(cells[0], default_year=season_start_year)
     else:
         joined = " ".join(cells)
@@ -398,7 +401,19 @@ def _looks_like_kulichki_match_row(cells: list[str]) -> bool:
 def _looks_like_compact_match_row(cells: list[str]) -> bool:
     if len(cells) < 2:
         return False
-    return DATE_TIME_RE.search(cells[0]) is not None and bool(_split_team_pair(cells[1])[0])
+    return DATE_TIME_RE.search(cells[0]) is not None and bool(_split_compact_match(cells[1])[0])
+
+
+def _split_compact_match(value: str) -> tuple[str, str, str]:
+    score_text = ""
+    teams_text = value
+    result_match = COMPACT_RESULT_RE.match(value.strip())
+    if result_match is not None:
+        teams_text = result_match.group("teams")
+        score_text = result_match.group("score")
+
+    home_team, away_team = _split_team_pair(teams_text)
+    return home_team, away_team, score_text
 
 
 def _split_team_pair(value: str) -> tuple[str, str]:

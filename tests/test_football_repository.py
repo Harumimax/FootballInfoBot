@@ -5,7 +5,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock
 
 from app.parser.dto import LeaguePageData, ParsedGoalEvent, ParsedLeague, ParsedMatch, ParsedRound, ParsedStandingRow
-from app.storage.models import League, MatchGoalEvent, Round, StandingRow
+from app.storage.models import League, MatchGoalEvent, Round, Season, StandingRow, Team
 from app.storage.repositories import FootballDataSqlAlchemyRepository
 from app.storage.repositories.football import _filter_nearby_catch_up_rounds, _select_finished_active_rounds
 
@@ -73,6 +73,49 @@ class FootballDataSqlAlchemyRepositoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(session.executed_statements), 1)
         self.assertNotIn("NOT IN", str(session.executed_statements[0]).upper())
         self.assertNotIn("team_subscriptions.league_id =", str(session.executed_statements[0]))
+
+    async def test_delete_legacy_compact_match_duplicate_builds_scoped_delete(self) -> None:
+        legacy_away_team = Team(
+            id=33,
+            source="kulichki",
+            source_name="Барселона (Испания) - 4:2",
+            normalized_name="барселона (испания) - 4:2",
+            display_name="Барселона (Испания) - 4:2",
+        )
+        session = FakeQuerySession(scalar_result=legacy_away_team)
+        repository = FootballDataSqlAlchemyRepository(session)
+        league = League(id=10, source="kulichki", code="league", name="Лига чемпионов", source_url="url")
+        season = Season(id=20, league_id=10, label="2026/2027", source_season_key="2027", is_current=True)
+        round_ = Round(id=30, league_id=10, season_id=20, round_number=3, status="active")
+        home_team = Team(
+            id=32,
+            source="kulichki",
+            source_name="ПСЖ",
+            normalized_name="псж",
+            display_name="ПСЖ",
+        )
+        parsed_match = ParsedMatch(
+            home_team="ПСЖ",
+            away_team="Барселона (Испания)",
+            scheduled_at=datetime(2026, 10, 20, 22, 0),
+            home_score=4,
+            away_score=2,
+            status="finished",
+        )
+
+        await repository._delete_legacy_compact_match_duplicate(  # type: ignore[attr-defined]
+            league,
+            season,
+            round_,
+            parsed_match,
+            home_team=home_team,
+        )
+
+        self.assertEqual(len(session.executed_statements), 1)
+        delete_sql = str(session.executed_statements[0])
+        self.assertIn("DELETE FROM matches", delete_sql)
+        self.assertIn("matches.away_team_id", delete_sql)
+        self.assertIn("matches.scheduled_at", delete_sql)
 
     async def test_get_current_round_returns_upcoming_round_when_no_active_round_exists(self) -> None:
         session = FakeAsyncSession()
